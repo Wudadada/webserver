@@ -108,6 +108,66 @@ void* threadpool<T>::worker(void* arg)
 	return pool;
 }
 
-template <typename>
+//主要实现，工作线程从请求队列中取出某个任务进行处理，注意线程同步。
+template <typename T>
+void threadpool<T>::run()
+{
+	while (!m_stop)
+	{
+		//信号量等待
+		m_queuestat.wait();
+
+		//被唤醒后先加互斥锁
+		m_queuelocker.lock();
+		if (m_workqueue.empty())
+		{
+			m_queuelocker.unlock();
+			continue;
+		}
+
+		//从请求队列中取出第一个任务
+		//将任务从请求队列删除
+		T* request = m_workqueue.front();
+		m_workqueue.pop_front();
+		m_queuelocker.unlock();
+		if (!request)
+			continue;
+
+		if (1 == m_actor_model)//整段看不太懂 
+		{
+			if (0 == request->m_state)
+			{
+				if (request->read_once())
+				{
+					request->improv = 1;
+					connectionRAII mysqlcon(&request->mysql, m_connPool);
+					request->process();
+				}
+				else
+				{
+					request->improv = 1;
+					request->timer_flag = 1;
+				}
+			}
+			else
+			{
+				if (request->write())
+				{
+					request->improv = 1;//improv是什么
+				}
+				else
+				{
+					request->improv = 1;
+					request->timer_flag = 1;
+				}
+			}
+		}
+		else
+		{
+			connectionRAII mysqlcon(&request->mysql, m_connPool);
+			request->process();
+		}
+	}
+}
 
 #endif 
