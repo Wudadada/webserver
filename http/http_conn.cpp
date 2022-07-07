@@ -144,5 +144,107 @@ void http_conn::init()
 	m_method = GET;
 	m_url = 0;
 	m_version = 0;
+	m_content_length = 0;
+	m_host = 0;
+	m_start_line = 0;
+	m_checked_idx = 0;
+	m_read_idx = 0;
+	m_write_idx = 0;
+	cgi = 0;
+	m_state = 0;
+	timer_flag = 0;
+	improv = 0;
 
+	memset(m_read_buf, '\0', READ_BUFFER_SIZE);
+	memset(m_write_buf, '\0', WRITE_BUFFER_SIZE);
+	memset(m_real_life, '\0', FILENAME_LEN);
 }
+
+//从状态机，用于分析出一行内容
+//返回值为行的读取状态，有LINE_OK,LINE_BAD,LINE_OPEN
+http_conn::LINE_STATUS http_conn::parse_line()
+{
+	char temp;
+	for (; m_checked_idx < m_read_idx; ++m_checked_idx)//从状态机在buffer中读取的位置m_checked_idx
+	{
+		temp = m_read_buf[m_checked_idx];
+		if (temp == '\r')//回车
+		{	
+
+			//下一个字符达到了buffer结尾，则接收不完整，需要继续接收
+			if ((m_checked_idx + 1) == m_read_idx)
+				return LINE_OPEN;
+			else if (m_read_buf[m_checked_idx + 1] == '\n')
+			{
+				m_read_buf[m_checked_idx++] = '\0';
+				m_read_buf[m_checked_idx++] = '\0';
+				return LINE_OK;
+			}
+			return LINE_BAD;
+		}
+
+		//如果当前字符是\n，也有可能读取到完整行
+		//一般是上次读取到\r就到buffer末尾了，没有接收完整，再次接收时会出现这种情况
+		else if (temp == '\n')
+		{
+			//前一个字符是\r，则接收完整
+			if (m_checked_idx > 1 && m_read_buf[m_checked_idx - 1] == '\r')
+			{
+				m_read_buf[m_checked_idx - 1] = '\0';
+				m_read_buf[m_checked_idx++] = '\0';
+				return LINE_OK;
+			}
+			return LINE_BAD;
+		}
+	}
+	return LINE_OPEN;//并没有找到\r\n，需要继续接收
+}
+
+//循环读取客户数据，知道无数据可读或对方关闭连接
+//非阻塞ET工作模式下，需要一次性将数据读完
+bool http_conn::read_once()
+{
+	if (m_read_idx >= READ_BUFFER_SIZE)
+	{
+		return false;
+	}
+	int bytes_read = 0;
+
+	//LT读取数据
+	if (0 == m_TRIGMode)
+	{
+		bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
+		m_read_idx += bytes_read;
+
+		if (bytes_read <= 0)
+		{
+			return false;
+		}
+
+		return true;
+	}
+
+	//ET读数据
+	else
+	{
+		while (true)
+		{
+			bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
+			if (bytes_read == -1)
+			{
+				if (errno == EAGAIN || errno == EWOULDBLOCK)
+					break;
+				return false;
+			}
+			else if (bytes_read == 0)
+			{
+				return false;
+			}
+			m_read_idx += bytes_read;
+		}
+
+		return true;
+	}
+}
+
+//
