@@ -5,8 +5,8 @@
 #include <cstdio>
 #include <exception>
 #include <pthread.h>
-#include "../lock/locker.h"
-#include "../CGImysql/sql_connection_pool.h"
+#include "..\lock\locker.h"
+#include "..\CGImysql\sql_connection_pool.h"
 
 template <typename T>
 class threadpool
@@ -20,7 +20,7 @@ public:
 
 private:
 	//工作线程运行的函数，它不断从工作队列中取出任务并执行
-	static void* worker(void* arg);//为什么要静态:每个实例化线程都会改变某些数据，如果没有静态，每个实例改变数据后都要再去更新数据.函数原型中的第三个参数，为函数指针，指向处理线程函数的地址。该函数，要求为静态函数。如果处理线程函数为类成员函数时，需要将其设置为静态成员函数。
+	static void* worker(void* arg);//每个实例化线程都会改变某些数据，如果没有静态，每个实例改变数据后都要再去更新数据.函数原型中的第三个参数，为函数指针，指向处理线程函数的地址。该函数，要求为静态函数。如果处理线程函数为类成员函数时，需要将其设置为静态成员函数。
 	void run();
 
 private:
