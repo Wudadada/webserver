@@ -12,55 +12,58 @@ using namespace std;
 
 class Log
 {
-	static Log* get_instance()
-	{
-		static Log instance;
-		return &instance;
-	}
+public:
+    //C++11ä»¥å,ä½¿ç”¨å±€éƒ¨å˜é‡æ‡’æ±‰ä¸ç”¨åŠ é”
+    static Log *get_instance()
+    {
+        static Log instance;
+        return &instance;
+    }
 
-	static void* flush_log_thread(void* args)
-	{
-		Log::get_instance()->async_write_log();
-	}
+    static void *flush_log_thread(void *args)
+    {
+        Log::get_instance()->async_write_log();
+    }
+    //å¯é€‰æ‹©çš„å‚æ•°æœ‰æ—¥å¿—æ–‡ä»¶ã€æ—¥å¿—ç¼“å†²åŒºå¤§å°ã€æœ€å¤§è¡Œæ•°ä»¥åŠæœ€é•¿æ—¥å¿—æ¡é˜Ÿåˆ—
+    bool init(const char *file_name, int close_log, int log_buf_size = 8192, int split_lines = 5000000, int max_queue_size = 0);
 
-	bool init(const char* file_name, int close_log, int log_buf_size = 8192, int split_lines = 5000000, int max_queue_size = 0);
+    void write_log(int level, const char *format, ...);
 
-	void write_log(int level, const char* format, ...);
-
-	void flush(void);
-
-private:
-	Log();
-	virtual ~Log();
-	void* async_write_log()
-	{
-		string sinlge_log;
-		while (m_log_queue->pop(single_log)
-		{
-			m_mutex.lock();
-			fputs(single_log.c_str(), m_fp);
-			m_mutex.lock();
-		}
-	}
+    void flush(void);
 
 private:
-	char dir_name[128];//Â·¾¶Ãû
-	char log_name[128];//logÎÄ¼şÃû
-	int m_split_lines;//ÈÕÖ¾×î´óĞĞÊı
-	int m_log_buf_size;//ÈÕÖ¾»º³åÇø´óĞ¡
-	long long m_count;//ÈÕÖ¾ĞĞÊı¼ÇÂ¼
-	int m_today;//ÒòÎª°´Ìì·ÖÀà,¼ÇÂ¼µ±Ç°Ê±¼äÊÇÄÇÒ»Ìì
-	FILE* m_fp;//´ò¿ªlogµÄÎÄ¼şÖ¸Õë
-	char* m_buf;
-	block_queue<string>* m_log_queue;//×èÈû¶ÓÁĞ
-	bool m_is_async;//ÊÇ·ñÒì²½±êÖ¾Î»
-	locker m_mutex;
-	int m_close_log;
+    Log();
+    virtual ~Log();
+    void *async_write_log()
+    {
+        string single_log;
+        //ä»é˜»å¡é˜Ÿåˆ—ä¸­å–å‡ºä¸€ä¸ªæ—¥å¿—stringï¼Œå†™å…¥æ–‡ä»¶
+        while (m_log_queue->pop(single_log))
+        {
+            m_mutex.lock();
+            fputs(single_log.c_str(), m_fp);
+            m_mutex.unlock();
+        }
+    }
+
+private:
+    char dir_name[128]; //è·¯å¾„å
+    char log_name[128]; //logæ–‡ä»¶å
+    int m_split_lines;  //æ—¥å¿—æœ€å¤§è¡Œæ•°
+    int m_log_buf_size; //æ—¥å¿—ç¼“å†²åŒºå¤§å°
+    long long m_count;  //æ—¥å¿—è¡Œæ•°è®°å½•
+    int m_today;        //å› ä¸ºæŒ‰å¤©åˆ†ç±»,è®°å½•å½“å‰æ—¶é—´æ˜¯é‚£ä¸€å¤©
+    FILE *m_fp;         //æ‰“å¼€logçš„æ–‡ä»¶æŒ‡é’ˆ
+    char *m_buf;
+    block_queue<string> *m_log_queue; //é˜»å¡é˜Ÿåˆ—
+    bool m_is_async;                  //æ˜¯å¦åŒæ­¥æ ‡å¿—ä½
+    locker m_mutex;
+    int m_close_log; //å…³é—­æ—¥å¿—
 };
 
-#define LOG_DEBUG(format, ...)if(0 == m_close_log){Log::get_instance()->write_log(0, format, ##__VA_ARGS__);Log::get_instance()->flush();}
-#define LOG_INFO(format, ...)if(0 == m_close_log){Log::get_instance()->write_log(1, format, ##__VA_ARGS__);Log::get_instance()->flush();}
-#define LOG_WARN(format, ...)if(0 == m_close_log){Log::get_instance()->write_log(2, format, ##__VA_ARGS__);Log::get_instance()->flush();}
-#define LOG_ERROR(format, ...)if(0 == m_close_log){Log::get_instance()->write_log(3, format, ##__VA_ARGS__);Log::get_instance()->flush();}
+#define LOG_DEBUG(format, ...) if(0 == m_close_log) {Log::get_instance()->write_log(0, format, ##__VA_ARGS__); Log::get_instance()->flush();}
+#define LOG_INFO(format, ...) if(0 == m_close_log) {Log::get_instance()->write_log(1, format, ##__VA_ARGS__); Log::get_instance()->flush();}
+#define LOG_WARN(format, ...) if(0 == m_close_log) {Log::get_instance()->write_log(2, format, ##__VA_ARGS__); Log::get_instance()->flush();}
+#define LOG_ERROR(format, ...) if(0 == m_close_log) {Log::get_instance()->write_log(3, format, ##__VA_ARGS__); Log::get_instance()->flush();}
 
 #endif

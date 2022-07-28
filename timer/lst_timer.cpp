@@ -3,222 +3,222 @@
 
 sort_timer_lst::sort_timer_lst()
 {
-	head = NULL;
-	tail = NULL;
+    head = NULL;
+    tail = NULL;
 }
-
 sort_timer_lst::~sort_timer_lst()
 {
-	util_timer* tmp = head;
-	while (tmp)
-	{
-		head = tmp->next;
-		delete tmp;
-		tmp = head;
-	}
+    util_timer *tmp = head;
+    while (tmp)
+    {
+        head = tmp->next;
+        delete tmp;
+        tmp = head;
+    }
 }
 
-void sort_timer_lst::add_timer(util_timer* timer)
+void sort_timer_lst::add_timer(util_timer *timer)
 {
-	if (!timer)
-	{
-		return;
-	}
-	if (!head)
-	{
-		head = tail = timer;
-		return;
-	}
-	if (timer->expire < head->expire)
-	{
-		timer->next = head;
-		head->prev = timer;
-		head = timer;
-		return;
-	}
-	add_timer(timer, head);
+    if (!timer)
+    {
+        return;
+    }
+    if (!head)
+    {
+        head = tail = timer;
+        return;
+    }
+    if (timer->expire < head->expire)
+    {
+        timer->next = head;
+        head->prev = timer;
+        head = timer;
+        return;
+    }
+    add_timer(timer, head);
 }
-
-void sort_timer_lst::adjust_timer(util_timer* timer)
+void sort_timer_lst::adjust_timer(util_timer *timer)
 {
-	if (!timer)
-	{
-		return;
-	}
-	util_timer* tmp = timer->next;
-	if (!tmp || (timer->expire < tmp->expire))
-	{
-		return;
-	}
-	if (timer == head)
-	{
-		head = head->next;
-		head->prev = NULL;
-		timer->next = NULL;
-		add_timer(timer, head);
-	}
-	else
-	{
-		timer->prev->next = timer->next;
-		timer->next->prev = timer->prev;
-		add_timer(timer, timer->next);
-	}
+    if (!timer)
+    {
+        return;
+    }
+    util_timer *tmp = timer->next;
+    if (!tmp || (timer->expire < tmp->expire))
+    {
+        return;
+    }
+    if (timer == head)
+    {
+        head = head->next;
+        head->prev = NULL;
+        timer->next = NULL;
+        add_timer(timer, head);
+    }
+    else
+    {
+        timer->prev->next = timer->next;
+        timer->next->prev = timer->prev;
+        add_timer(timer, timer->next);
+    }
 }
-void sort_timer_lst::del_timer(util_timer* timer)
+void sort_timer_lst::del_timer(util_timer *timer)
 {
-	if (!timer)
-	{
-		return;
-	}
-	if ((timer == head) && (timer == tail))
-	{
-		delete timer;
-		head = NULL;
-		tail = NULL;
-		return;
-	}
-	if (timer == head)
-	{
-		head = head->next;
-		head->prev = NULL;
-		delete timer;
-		return;
-	}
-	if (timer == tail)
-	{
-		tail = tail->prev;
-		tail->next = NULL;
-		delete timer;
-		return;
-	}
-	timer->prev->next = timer->next;
-	timer->next->prev = timer->prev;
-	delete timer;
+    if (!timer)
+    {
+        return;
+    }
+    if ((timer == head) && (timer == tail))
+    {
+        delete timer;
+        head = NULL;
+        tail = NULL;
+        return;
+    }
+    if (timer == head)
+    {
+        head = head->next;
+        head->prev = NULL;
+        delete timer;
+        return;
+    }
+    if (timer == tail)
+    {
+        tail = tail->prev;
+        tail->next = NULL;
+        delete timer;
+        return;
+    }
+    timer->prev->next = timer->next;
+    timer->next->prev = timer->prev;
+    delete timer;
 }
-//¶¨Ê±ÈÎÎñ´¦Àíº¯Êý
 void sort_timer_lst::tick()
 {
-	if (!head)
-	{
-		return;
-	}
-
-	//»ñÈ¡µ±Ç°Ê±¼ä
-	time_t cur = time(NULL);
-	util_timer* tmp = head;
-
-	//±éÀú¶¨Ê±Æ÷Á´±í
-	while (tmp)
-	{
-		if (cur < tmp->expire)
-		{
-			break;
-		}
-
-		//µ±Ç°¶¨Ê±Æ÷µ½ÆÚ£¬Ôòµ÷ÓÃ»Øµ÷º¯Êý£¬Ö´ÐÐ¶¨Ê±ÊÂ¼þ
-		tmp->cb_func(tmp->user_data);
-
-		////½«´¦ÀíºóµÄ¶¨Ê±Æ÷´ÓÁ´±íÈÝÆ÷ÖÐÉ¾³ý£¬²¢ÖØÖÃÍ·½áµã
-		head = tmp->next;
-		if (head)
-		{
-			head->prev = NULL;
-		}
-		delete tmp;
-		tmp = head;
-	}
+    if (!head)
+    {
+        return;
+    }
+    
+    time_t cur = time(NULL);
+    util_timer *tmp = head;
+    while (tmp)
+    {
+        if (cur < tmp->expire)
+        {
+            break;
+        }
+        tmp->cb_func(tmp->user_data);
+        head = tmp->next;
+        if (head)
+        {
+            head->prev = NULL;
+        }
+        delete tmp;
+        tmp = head;
+    }
 }
 
-void sort_timer_lst::add_timer(util_timer* timer, util_timer* lst_head)
+void sort_timer_lst::add_timer(util_timer *timer, util_timer *lst_head)
 {
-	util_timer* prev = lst_head;
-	util_timer* tmp = prev->next;
-	while (tmp)
-	{
-		if (timer->expire < tmp->expire)
-		{
-			prev->next = timer;
-			timer->next = tmp;
-			tmp->prev = timer;
-			timer->prev = prev;
-			break;
-		}
-		prev = tmp;
-		tmp = tmp->next;
-	}
-	if (!tmp)
-	{
-		prev->next = timer;
-		timer->prev = prev;
-		timer->next = NULL;
-		tail = timer;
-	}
+    util_timer *prev = lst_head;
+    util_timer *tmp = prev->next;
+    while (tmp)
+    {
+        if (timer->expire < tmp->expire)
+        {
+            prev->next = timer;
+            timer->next = tmp;
+            tmp->prev = timer;
+            timer->prev = prev;
+            break;
+        }
+        prev = tmp;
+        tmp = tmp->next;
+    }
+    if (!tmp)
+    {
+        prev->next = timer;
+        timer->prev = prev;
+        timer->next = NULL;
+        tail = timer;
+    }
 }
 
 void Utils::init(int timeslot)
 {
-	m_TIMESLOT = timeslow;
+    m_TIMESLOT = timeslot;
 }
 
-//¶ÔÎÄ¼þÃèÊö·ûÉèÖÃ·Ç×èÈû
+//å¯¹æ–‡ä»¶æè¿°ç¬¦è®¾ç½®éžé˜»å¡ž
 int Utils::setnonblocking(int fd)
 {
-	int old_option = fcntl(fd, F_GETFL);
-	int new_option = old_option | O_NONBLOCK;
-	fcntl(fd, F_SETFL, new_option);
-	return old_option;
+    int old_option = fcntl(fd, F_GETFL);
+    int new_option = old_option | O_NONBLOCK;
+    fcntl(fd, F_SETFL, new_option);
+    return old_option;
 }
 
-//½«ÄÚºËÊÂ¼þ±í×¢²á¶ÁÊÂ¼þ£¬ETÄ£Ê½£¬Ñ¡Ôñ¿ªÆôEPOLLONESHOT
+//å°†å†…æ ¸äº‹ä»¶è¡¨æ³¨å†Œè¯»äº‹ä»¶ï¼ŒETæ¨¡å¼ï¼Œé€‰æ‹©å¼€å¯EPOLLONESHOT
 void Utils::addfd(int epollfd, int fd, bool one_shot, int TRIGMode)
 {
-	epoll_event event;
-	event.data.fd = fd;
+    epoll_event event;
+    event.data.fd = fd;
 
-	if (1 == TRIGMode)
-		event.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
-	else
-		event.events = EPOLLIN | EPOLLRDHUP;
+    if (1 == TRIGMode)
+        event.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
+    else
+        event.events = EPOLLIN | EPOLLRDHUP;
 
-	if (one_shot)
-		event.events |= EPOLLONESHOT;
-	epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &event);
-	setnonblocking(fd);
+    if (one_shot)
+        event.events |= EPOLLONESHOT;
+    epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &event);
+    setnonblocking(fd);
 }
 
-//ÐÅºÅ´¦Àíº¯Êý
+//ä¿¡å·å¤„ç†å‡½æ•°
+void Utils::sig_handler(int sig)
+{
+    //ä¸ºä¿è¯å‡½æ•°çš„å¯é‡å…¥æ€§ï¼Œä¿ç•™åŽŸæ¥çš„errno
+    int save_errno = errno;
+    int msg = sig;
+    send(u_pipefd[1], (char *)&msg, 1, 0);
+    errno = save_errno;
+}
+
+//è®¾ç½®ä¿¡å·å‡½æ•°
 void Utils::addsig(int sig, void(handler)(int), bool restart)
 {
-	struct sigaction sa;
-	memset(&sa, '\0', sizeof(sa));
-	sa.sa_handler = handler;
-	if (restart)
-		sa.sa_flags |= SA_RESTART;
-	sigfillset(&sa.sa_mask);
-	assert(sigaction(sig, &sa, NULL) != -1);
+    struct sigaction sa;
+    memset(&sa, '\0', sizeof(sa));
+    sa.sa_handler = handler;
+    if (restart)
+        sa.sa_flags |= SA_RESTART;
+    sigfillset(&sa.sa_mask);
+    assert(sigaction(sig, &sa, NULL) != -1);
 }
 
-//¶¨Ê±´¦ÀíÈÎÎñ£¬ÖØÐÂ¶¨Ê±ÒÔ²»¶Ï³ö·¢SIGALRMÐÅºÅ
+//å®šæ—¶å¤„ç†ä»»åŠ¡ï¼Œé‡æ–°å®šæ—¶ä»¥ä¸æ–­è§¦å‘SIGALRMä¿¡å·
 void Utils::timer_handler()
 {
-	m_timer_lst.tick();
-	alarm(m_TIMESLOT);
+    m_timer_lst.tick();
+    alarm(m_TIMESLOT);
 }
 
-void Utils::show_error(int connfd, const char* info)
+void Utils::show_error(int connfd, const char *info)
 {
-	send(connfd, info, strlen(info), 0);
-	close(connfd);
+    send(connfd, info, strlen(info), 0);
+    close(connfd);
 }
 
-int* Utils::u_pipefd = 0;
+int *Utils::u_pipefd = 0;
 int Utils::u_epollfd = 0;
 
 class Utils;
-void cb_func(client_data* user_data)
+void cb_func(client_data *user_data)
 {
-	epoll_ctl(Utils::u_epollfd, EPOLL_CTL_DEL, user_data->sockfd, 0);
-	assert(user_data);
-	close(user_data->sockfd);
-	http_conn::m_user_count--;
+    epoll_ctl(Utils::u_epollfd, EPOLL_CTL_DEL, user_data->sockfd, 0);
+    assert(user_data);
+    close(user_data->sockfd);
+    http_conn::m_user_count--;
 }

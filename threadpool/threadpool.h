@@ -12,162 +12,141 @@ template <typename T>
 class threadpool
 {
 public:
-	//thread_numberÏß³Ì³ØÖĞÏß³ÌÊıÁ¿£¬max_requestsÇëÇó¶ÓÁĞ×î¶àÔÊĞíµÄ¡¢µÈ´ıµÄÇëÇóµÄÊıÁ¿ 
-	threadpool(int actor_model, connection_pool* connPool, int thread_number = 8, int max_request = 10000);
-	~threadpool();
-	bool append(T *request, int state); //ÏñÇëÇó¶ÓÁĞÖĞ²åÈëÈÎÎñÇëÇó
-	bool append_p(T *request);
+    /*thread_numberæ˜¯çº¿ç¨‹æ± ä¸­çº¿ç¨‹çš„æ•°é‡ï¼Œmax_requestsæ˜¯è¯·æ±‚é˜Ÿåˆ—ä¸­æœ€å¤šå…è®¸çš„ã€ç­‰å¾…å¤„ç†çš„è¯·æ±‚çš„æ•°é‡*/
+    threadpool(int actor_model, connection_pool *connPool, int thread_number = 8, int max_request = 10000);
+    ~threadpool();
+    bool append(T *request, int state);
+    bool append_p(T *request);
 
 private:
-	//¹¤×÷Ïß³ÌÔËĞĞµÄº¯Êı£¬Ëü²»¶Ï´Ó¹¤×÷¶ÓÁĞÖĞÈ¡³öÈÎÎñ²¢Ö´ĞĞ
-	static void* worker(void* arg);//ÎªÊ²Ã´Òª¾²Ì¬:Ã¿¸öÊµÀı»¯Ïß³Ì¶¼»á¸Ä±äÄ³Ğ©Êı¾İ£¬Èç¹ûÃ»ÓĞ¾²Ì¬£¬Ã¿¸öÊµÀı¸Ä±äÊı¾İºó¶¼ÒªÔÙÈ¥¸üĞÂÊı¾İ.º¯ÊıÔ­ĞÍÖĞµÄµÚÈı¸ö²ÎÊı£¬Îªº¯ÊıÖ¸Õë£¬Ö¸Ïò´¦ÀíÏß³Ìº¯ÊıµÄµØÖ·¡£¸Ãº¯Êı£¬ÒªÇóÎª¾²Ì¬º¯Êı¡£Èç¹û´¦ÀíÏß³Ìº¯ÊıÎªÀà³ÉÔ±º¯ÊıÊ±£¬ĞèÒª½«ÆäÉèÖÃÎª¾²Ì¬³ÉÔ±º¯Êı¡£
-	void run();
+    /*å·¥ä½œçº¿ç¨‹è¿è¡Œçš„å‡½æ•°ï¼Œå®ƒä¸æ–­ä»å·¥ä½œé˜Ÿåˆ—ä¸­å–å‡ºä»»åŠ¡å¹¶æ‰§è¡Œä¹‹*/
+    static void *worker(void *arg);
+    void run();
 
 private:
-	int m_thread_number;			//Ïß³Ì³ØÖĞµÄÏß³ÌÊı
-	int m_max_requests;				//ÇëÇó¶ÓÁĞÖĞÔÊĞíµÄ×î´óÇëÇóÊı
-	pthread_t* m_threads;			//ÃèÊöÏß³Ì³ØµÄÊı×é,´óĞ¡Îªm_thread_number
-	std::list<T*> m_workqueue;		//ÇëÇó¶ÓÁĞ
-	locker m_queuelocker;			//±£»¤ÇëÇó¶ÓÁĞµÄ»¥³âËø
-	sem m_quequestat;				//ÊÇ·ñÓĞÈÎÎñĞèÒª´¦Àí
-	connection_pool* m_connPool;	//Êı¾İ¿â
-	int m_actor_model;				//Ä£ĞÍÇĞ»»
+    int m_thread_number;        //çº¿ç¨‹æ± ä¸­çš„çº¿ç¨‹æ•°
+    int m_max_requests;         //è¯·æ±‚é˜Ÿåˆ—ä¸­å…è®¸çš„æœ€å¤§è¯·æ±‚æ•°
+    pthread_t *m_threads;       //æè¿°çº¿ç¨‹æ± çš„æ•°ç»„ï¼Œå…¶å¤§å°ä¸ºm_thread_number
+    std::list<T *> m_workqueue; //è¯·æ±‚é˜Ÿåˆ—
+    locker m_queuelocker;       //ä¿æŠ¤è¯·æ±‚é˜Ÿåˆ—çš„äº’æ–¥é”
+    sem m_queuestat;            //æ˜¯å¦æœ‰ä»»åŠ¡éœ€è¦å¤„ç†
+    connection_pool *m_connPool;  //æ•°æ®åº“
+    int m_actor_model;          //æ¨¡å‹åˆ‡æ¢
 };
 template <typename T>
-threadpool<T>::threadpool(int actor_model, connection_pool* connPool, int thread_number, int max_requests)
-	:m_actor_model(actor_model),
-	m_htread_number(thread_number),
-	m_max_requests(max_requests),
-	m_threads(NULL),
-	m_connPool(connPool) 
+threadpool<T>::threadpool( int actor_model, connection_pool *connPool, int thread_number, int max_requests) : m_actor_model(actor_model),m_thread_number(thread_number), m_max_requests(max_requests), m_threads(NULL),m_connPool(connPool)
 {
-	if (thread_number <= 0 || max_requests <= 0)
-		throw std::exception();
-	m_threads = new phread_t[m_thread_number];
-	if (!m_threads)
-		throw std::exception();
-	for (int i = 0; i < thread_number; ++i)
-	{
-		if (pthread_create(m_threads + i, NULL, worker, this) != 0)//ÎªÊ²Ã´thisÊÇvoid*
-		{
-			delete[] m_threads;
-			throw std::exception();
-		}
-		if (pthread_detach(m_threads[i]))
-		{
-			deltte[] m_threads;
-			throw std::exception;
-		}
-	}
+    if (thread_number <= 0 || max_requests <= 0)
+        throw std::exception();
+    m_threads = new pthread_t[m_thread_number];
+    if (!m_threads)
+        throw std::exception();
+    for (int i = 0; i < thread_number; ++i)
+    {
+        if (pthread_create(m_threads + i, NULL, worker, this) != 0)
+        {
+            delete[] m_threads;
+            throw std::exception();
+        }
+        if (pthread_detach(m_threads[i]))
+        {
+            delete[] m_threads;
+            throw std::exception();
+        }
+    }
 }
-
 template <typename T>
 threadpool<T>::~threadpool()
 {
-	delele[] m_threads;
+    delete[] m_threads;
 }
-
 template <typename T>
-bool threadpool<T>::append(T* request, int state)
+bool threadpool<T>::append(T *request, int state)
 {
-	m_queuelocker.lock();
-	if (m_workqueue.size() >= m_max_requests)
-	{
-		m_queuelocker.unlock();
-		return false;
-	}
-	request->m_state = state;
-	m_workqueue.push_back(request);
-	m_queuelocker.unlock();
-	m_queuestat.post();
-	return true;
+    m_queuelocker.lock();
+    if (m_workqueue.size() >= m_max_requests)
+    {
+        m_queuelocker.unlock();
+        return false;
+    }
+    request->m_state = state;
+    m_workqueue.push_back(request);
+    m_queuelocker.unlock();
+    m_queuestat.post();
+    return true;
 }
-
-template<typename T>
-bool threadpool<T>::append_p(T* request)
+template <typename T>
+bool threadpool<T>::append_p(T *request)
 {
-	m_queuelocker.lock();
-	if (m_workqueue.size() >= m_max_requests)
-	{
-		m_queuelocker.unlock();
-		return false;
-	}
-	m_workqueue.push_back(request);
-	m_queuelocker.unlock();
-	m_queuestat.post();
-	return true;
+    m_queuelocker.lock();
+    if (m_workqueue.size() >= m_max_requests)
+    {
+        m_queuelocker.unlock();
+        return false;
+    }
+    m_workqueue.push_back(request);
+    m_queuelocker.unlock();
+    m_queuestat.post();
+    return true;
 }
-
-//Ïß³Ì´¦Àíº¯Êı:ÄÚ²¿·ÃÎÊË½ÓĞ³ÉÔ±º¯Êırun£¬Íê³ÉÏß³Ì´¦ÀíÒªÇó¡£
-template<typename T>
-void* threadpool<T>::worker(void* arg)
+template <typename T>
+void *threadpool<T>::worker(void *arg)
 {
-	//½«²ÎÊıÇ¿×ªÎªÏß³Ì³ØÀà£¬µ÷ÓÃ³ÉÔ±·½·¨
-	threadpool* pool = (threadpool*)arg;
-	pool->run();
-	return pool;
+    threadpool *pool = (threadpool *)arg;
+    pool->run();
+    return pool;
 }
-
-//Ö÷ÒªÊµÏÖ£¬¹¤×÷Ïß³Ì´ÓÇëÇó¶ÓÁĞÖĞÈ¡³öÄ³¸öÈÎÎñ½øĞĞ´¦Àí£¬×¢ÒâÏß³ÌÍ¬²½¡£
 template <typename T>
 void threadpool<T>::run()
 {
-	while (!m_stop)
-	{
-		//ĞÅºÅÁ¿µÈ´ı
-		m_queuestat.wait();
-
-		//±»»½ĞÑºóÏÈ¼Ó»¥³âËø
-		m_queuelocker.lock();
-		if (m_workqueue.empty())
-		{
-			m_queuelocker.unlock();
-			continue;
-		}
-
-		//´ÓÇëÇó¶ÓÁĞÖĞÈ¡³öµÚÒ»¸öÈÎÎñ
-		//½«ÈÎÎñ´ÓÇëÇó¶ÓÁĞÉ¾³ı
-		T* request = m_workqueue.front();
-		m_workqueue.pop_front();
-		m_queuelocker.unlock();
-		if (!request)
-			continue;
-
-		if (1 == m_actor_model)//Õû¶Î¿´²»Ì«¶® 
-		{
-			if (0 == request->m_state)
-			{
-				if (request->read_once())
-				{
-					request->improv = 1;
-					connectionRAII mysqlcon(&request->mysql, m_connPool);
-					request->process();
-				}
-				else
-				{
-					request->improv = 1;
-					request->timer_flag = 1;
-				}
-			}
-			else
-			{
-				if (request->write())
-				{
-					request->improv = 1;//improvÊÇÊ²Ã´
-				}
-				else
-				{
-					request->improv = 1;
-					request->timer_flag = 1;
-				}
-			}
-		}
-		else
-		{
-			connectionRAII mysqlcon(&request->mysql, m_connPool);
-			request->process();
-		}
-	}
+    while (true)
+    {
+        m_queuestat.wait();
+        m_queuelocker.lock();
+        if (m_workqueue.empty())
+        {
+            m_queuelocker.unlock();
+            continue;
+        }
+        T *request = m_workqueue.front();
+        m_workqueue.pop_front();
+        m_queuelocker.unlock();
+        if (!request)
+            continue;
+        if (1 == m_actor_model)
+        {
+            if (0 == request->m_state)
+            {
+                if (request->read_once())
+                {
+                    request->improv = 1;
+                    connectionRAII mysqlcon(&request->mysql, m_connPool);
+                    request->process();
+                }
+                else
+                {
+                    request->improv = 1;
+                    request->timer_flag = 1;
+                }
+            }
+            else
+            {
+                if (request->write())
+                {
+                    request->improv = 1;
+                }
+                else
+                {
+                    request->improv = 1;
+                    request->timer_flag = 1;
+                }
+            }
+        }
+        else
+        {
+            connectionRAII mysqlcon(&request->mysql, m_connPool);
+            request->process();
+        }
+    }
 }
-
-#endif 
+#endif

@@ -4,176 +4,161 @@
 #include <stdarg.h>
 #include "log.h"
 #include <pthread.h>
-
 using namespace std;
 
 Log::Log()
 {
-	m_count = 0;
-	m_is_async = false;
+    m_count = 0;
+    m_is_async = false;
 }
 
 Log::~Log()
 {
-	if (m_fp != NULL)
-	{
-		fclose(m_fp);
-	}
+    if (m_fp != NULL)
+    {
+        fclose(m_fp);
+    }
+}
+//å¼‚æ­¥éœ€è¦è®¾ç½®é˜»å¡é˜Ÿåˆ—çš„é•¿åº¦ï¼ŒåŒæ­¥ä¸éœ€è¦è®¾ç½®
+bool Log::init(const char *file_name, int close_log, int log_buf_size, int split_lines, int max_queue_size)
+{
+    //å¦‚æœè®¾ç½®äº†max_queue_size,åˆ™è®¾ç½®ä¸ºå¼‚æ­¥
+    if (max_queue_size >= 1)
+    {
+        m_is_async = true;
+        m_log_queue = new block_queue<string>(max_queue_size);
+        pthread_t tid;
+        //flush_log_threadä¸ºå›è°ƒå‡½æ•°,è¿™é‡Œè¡¨ç¤ºåˆ›å»ºçº¿ç¨‹å¼‚æ­¥å†™æ—¥å¿—
+        pthread_create(&tid, NULL, flush_log_thread, NULL);
+    }
+    
+    m_close_log = close_log;
+    m_log_buf_size = log_buf_size;
+    m_buf = new char[m_log_buf_size];
+    memset(m_buf, '\0', m_log_buf_size);
+    m_split_lines = split_lines;
+
+    time_t t = time(NULL);
+    struct tm *sys_tm = localtime(&t);
+    struct tm my_tm = *sys_tm;
+
+ 
+    const char *p = strrchr(file_name, '/');
+    char log_full_name[256] = {0};
+
+    if (p == NULL)
+    {
+        snprintf(log_full_name, 255, "%d_%02d_%02d_%s", my_tm.tm_year + 1900, my_tm.tm_mon + 1, my_tm.tm_mday, file_name);
+    }
+    else
+    {
+        strcpy(log_name, p + 1);
+        strncpy(dir_name, file_name, p - file_name + 1);
+        snprintf(log_full_name, 255, "%s%d_%02d_%02d_%s", dir_name, my_tm.tm_year + 1900, my_tm.tm_mon + 1, my_tm.tm_mday, log_name);
+    }
+
+    m_today = my_tm.tm_mday;
+    
+    m_fp = fopen(log_full_name, "a");
+    if (m_fp == NULL)
+    {
+        return false;
+    }
+
+    return true;
 }
 
-bool Log::init(const char* file_name, int close_log, int log_buf_size, int split_lines, int max_queue_size)
+void Log::write_log(int level, const char *format, ...)
 {
-	if (max_queue_size >= 1)
-	{
-		m_is_async = true;
-		m_log_queue = new block_queue<string>(max_queue_size);
-		pthread_t tid;
-		pthread_create(&tid, NULL, flush_log_thread, NULL);
-	}
+    struct timeval now = {0, 0};
+    gettimeofday(&now, NULL);
+    time_t t = now.tv_sec;
+    struct tm *sys_tm = localtime(&t);
+    struct tm my_tm = *sys_tm;
+    char s[16] = {0};
+    switch (level)
+    {
+    case 0:
+        strcpy(s, "[debug]:");
+        break;
+    case 1:
+        strcpy(s, "[info]:");
+        break;
+    case 2:
+        strcpy(s, "[warn]:");
+        break;
+    case 3:
+        strcpy(s, "[erro]:");
+        break;
+    default:
+        strcpy(s, "[info]:");
+        break;
+    }
+    //å†™å…¥ä¸€ä¸ªlogï¼Œå¯¹m_count++, m_split_linesæœ€å¤§è¡Œæ•°
+    m_mutex.lock();
+    m_count++;
 
-	m_close_log = close_log;
-	m_log_buf_size = log_buf_size;
-	m_buf = new char[m_log_buf_size];
-	memset(m_buf, '\0', m_log_buf_size);
-	m_split_lines = split_lines; //ÈÕÖ¾µÄ×î´óĞĞÊı
+    if (m_today != my_tm.tm_mday || m_count % m_split_lines == 0) //everyday log
+    {
+        
+        char new_log[256] = {0};
+        fflush(m_fp);
+        fclose(m_fp);
+        char tail[16] = {0};
+       
+        snprintf(tail, 16, "%d_%02d_%02d_", my_tm.tm_year + 1900, my_tm.tm_mon + 1, my_tm.tm_mday);
+       
+        if (m_today != my_tm.tm_mday)
+        {
+            snprintf(new_log, 255, "%s%s%s", dir_name, tail, log_name);
+            m_today = my_tm.tm_mday;
+            m_count = 0;
+        }
+        else
+        {
+            snprintf(new_log, 255, "%s%s%s.%lld", dir_name, tail, log_name, m_count / m_split_lines);
+        }
+        m_fp = fopen(new_log, "a");
+    }
+ 
+    m_mutex.unlock();
 
-	time_t t = time(NULL);
-	struct tm* sys_tm = localtime(&t);
-	struct tm my_tm = *sys_tm;
+    va_list valst;
+    va_start(valst, format);
 
-	const char* p = strchr(file_name, '/');
-	char log_full_name[256] = { 0 };
+    string log_str;
+    m_mutex.lock();
 
-	if (p == NULL)
-	{
-		snprintf(log_full_name, 255, " //ÈÕÖ¾µÄ×î´óĞĞÊı", my_tm.tm_year + 1900, my_tm.tm_mon + 1, my_tm.tm_mday, file_name);
-	}
-	else
-	{	
-		//½«/µÄÎ»ÖÃÏòºóÒÆ¶¯Ò»¸öÎ»ÖÃ£¬È»ºó¸´ÖÆµ½lognameÖĞ
-		//p - file_name + 1ÊÇÎÄ¼şËùÔÚÂ·¾¶ÎÄ¼ş¼ĞµÄ³¤¶È
-		//dirnameÏàµ±ÓÚ./
-		strcpy(log_name, p + 1);
-		strncpy(dir_name, file_name, p - file_name + 1);
-		snprintf(log_full_name, 255, "%s%d_%02d_%02d_%s", dir_name, my_tm.tm_year + 1900, my_tm.tm_mon + 1, my_tm.tm_mday, log_name);
-	}
+    //å†™å…¥çš„å…·ä½“æ—¶é—´å†…å®¹æ ¼å¼
+    int n = snprintf(m_buf, 48, "%d-%02d-%02d %02d:%02d:%02d.%06ld %s ",
+                     my_tm.tm_year + 1900, my_tm.tm_mon + 1, my_tm.tm_mday,
+                     my_tm.tm_hour, my_tm.tm_min, my_tm.tm_sec, now.tv_usec, s);
+    
+    int m = vsnprintf(m_buf + n, m_log_buf_size - 1, format, valst);
+    m_buf[n + m] = '\n';
+    m_buf[n + m + 1] = '\0';
+    log_str = m_buf;
 
-	m_today = my_tm.tm_mday;
+    m_mutex.unlock();
 
-	m_fp = fopen(log_full_name, "a");
-	if (m_fp == NULL)
-	{
-		return false;
-	}
+    if (m_is_async && !m_log_queue->full())
+    {
+        m_log_queue->push(log_str);
+    }
+    else
+    {
+        m_mutex.lock();
+        fputs(log_str.c_str(), m_fp);
+        m_mutex.unlock();
+    }
 
-	return true;
-}
-
-void Log::write_log(int level, const char* format, ...)
-{
-	struct timeval now = { 0, 0 };
-	gettimeofday(&now, NULL);
-	time_t t = now.tv_sec;
-	struct tm* sys_tm = localtime(&t);
-	struct tm my_tm = *sys_tm;
-	char s[16] = { 0 };
-
-	switch (level)
-	{
-	case 0:
-		strcpy(s, "[debug]:");
-		break;
-	case 1:
-		strcpy(s, "[info]:");
-		break;
-	case 2:
-		strcpy(s, "[warn]:");
-		break;
-	case 3:
-		strcpy(s, "[erro]:");
-		break;
-	default:
-		strcpy(s, "[info]:");
-		break;
-	}
-
-	//Ğ´ÈëÒ»¸ölog£¬¶Ôm_count++,  m_split_lines×î´óĞĞÊı
-	m_mutex.lock();
-
-	//¸üĞÂÏÖÓĞĞĞÊı
-	m_count++;
-
-	//ÈÕÖ¾²»ÊÇ½ñÌì»òĞ´ÈëµÄÈÕÖ¾ĞĞÊıÊÇ×î´óĞĞµÄ±¶Êı
-	//m_split_linesÎª×î´óĞĞÊı
-	if (m_today != my_tm.tm_mday || m_count % m_split_lines == 0)
-	{
-		char new_log[256] = [0];
-		fflush(m_fp);
-		fclose(m_fp);
-		char tail[16] = { 0 };
-
-		//¸ñÊ½»¯ÈÕÖ¾ÃûÖĞµÄÊ±¼ä²¿·Ö
-		snprintf(tail, 16, "%d_%02d_%02d_", my_tm.tm_year + 1900, my_tm.tm_mon + 1, my_tm.tm_mday);
-
-		//Èç¹ûÊÇÊ±¼ä²»ÊÇ½ñÌì,Ôò´´½¨½ñÌìµÄÈÕÖ¾£¬¸üĞÂm_todayºÍm_count
-		if (m_today != my_tm.tm_mday)
-		{
-			snprintf(new_log, 255, "%s%s%s", dir_name, tail, log_name);
-			m_today = my_tm.tm_mday;
-			m_count = 0;
-		}
-		else
-		{
-			//³¬¹ıÁË×î´óĞĞ£¬ÔÚÖ®Ç°µÄÈÕÖ¾Ãû»ù´¡ÉÏ¼Óºó×º, m_count/m_split_lines
-			snprintf(new_log, 255, "%s%s%s.%lld", dir_name, tail, log_name, m_count / m_split_lines);
-		}
-		m_fp = fopen(new_log, "a");
-	}
-
-	m_mutex.unlock();
-
-	va_list valst;
-	//½«´«ÈëµÄformat²ÎÊı¸³Öµ¸øvalst£¬±ãÓÚ¸ñÊ½»¯Êä³ö
-	va_start(valst, format);
-
-	string log_str;
-	m_mutex.lock();
-
-	//Ğ´ÈëÄÚÈİ¸ñÊ½£ºÊ±¼ä + ÄÚÈİ
-	//Ê±¼ä¸ñÊ½»¯£¬snprintf³É¹¦·µ»ØĞ´×Ö·ûµÄ×ÜÊı£¬ÆäÖĞ²»°üÀ¨½áÎ²µÄnull×Ö·û
-	int n = snprintf(m_buf, 48, "%d-%02d-%02d %02d:%02d:%02d.%06ld %s ",
-		my_tm.tm_year + 1900, my_tm.tm_mon + 1, my_tm.tm_mday,
-		my_tm.tm_hour, my_tm.tm_min, my_tm.tm_sec, now.tv_usec, s);
-
-	//ÄÚÈİ¸ñÊ½»¯£¬ÓÃÓÚÏò×Ö·û´®ÖĞ´òÓ¡Êı¾İ¡¢Êı¾İ¸ñÊ½ÓÃ»§×Ô¶¨Òå£¬·µ»ØĞ´Èëµ½×Ö·ûÊı×éstrÖĞµÄ×Ö·û¸öÊı(²»°üº¬ÖÕÖ¹·û)
-	int m = vsnprintf(m_buf + n, m_log_buf_size - 1, format, valst);
-	m_buf[m + n] = '\n';
-	m_buf[m + n + 1] = '\0';
-
-	log_str = m_buf;
-	
-	m_mutex.unlock();
-
-	//Èôm_is_asyncÎªtrue±íÊ¾Òì²½£¬Ä¬ÈÏÎªÍ¬²½
-	//ÈôÒì²½,Ôò½«ÈÕÖ¾ĞÅÏ¢¼ÓÈë×èÈû¶ÓÁĞ,Í¬²½Ôò¼ÓËøÏòÎÄ¼şÖĞĞ´
-	if (m_is_async && !m_log_queue->full())
-	{
-		m_log_queue->push(log_str);
-	}
-	else
-	{
-		m_mutex.lock();
-		fputs(log_str.c_str(), m_fp);
-		m_mutex.unlock();
-	}
-
-	va_end(valst);
+    va_end(valst);
 }
 
 void Log::flush(void)
 {
-	m_mutex.lock();
-	//Ç¿ÖÆË¢ĞÂĞ´ÈëÁ÷»º³åÇø
-	fflush(m_fp);
-	m_mutex.unlock();
+    m_mutex.lock();
+    //å¼ºåˆ¶åˆ·æ–°å†™å…¥æµç¼“å†²åŒº
+    fflush(m_fp);
+    m_mutex.unlock();
 }

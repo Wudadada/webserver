@@ -1,36 +1,41 @@
 #include "config.h"
 
-int main(int argc, char* argv[]) {
-	//ĞŞ¸ÄĞèÒªµÄÊı¾İ¿âĞÅÏ¢£¬µÇÂ¼Ãû£¬ÃÜÂë£¬¿âÃû
-	string user = "wqd";
-	string passwd = "123";
-	string databasename = "wqd";
+int main(int argc, char *argv[])
+{
+    //éœ€è¦ä¿®æ”¹çš„æ•°æ®åº“ä¿¡æ¯,ç™»å½•å,å¯†ç ,åº“å
+    string user = "root";
+    string passwd = "wuqidA-1997";
+    string databasename = "wqd";
 
-	//ÃüÁîĞĞ½âÎö
-	Config config;
-	config.parse_arg(argc, argv);
+    //å‘½ä»¤è¡Œè§£æ
+    Config config;
+    config.parse_arg(argc, argv);
 
-	Webserver server;
+    WebServer server;
 
-	//³õÊ¼»¯
-	server.init(config.PORT, user, passwd, databasename, config.LOGWriter,
-		config.OPT_LINGER, config.TRIGMode, config.sql_num, config, thread_num,
-		config.close_log, config.actor_model);
+    //åˆå§‹åŒ–
+    server.init(config.PORT, user, passwd, databasename, config.LOGWrite, 
+                config.OPT_LINGER, config.TRIGMode,  config.sql_num,  config.thread_num, 
+                config.close_log, config.actor_model);
+    
 
-	//ÈÕÖ¾
-	server.log_writer();
+    //æ—¥å¿—
+    server.log_write();
 
-	//Êı¾İ¿â
-	server.sql_pool();
+    //æ•°æ®åº“
+    server.sql_pool();
 
-	//Ïß³Ì³Ø
-	server.thread_pool();
+    //çº¿ç¨‹æ± 
+    server.thread_pool();
 
-	//´¥·¢Ä£Ê½
-	server.trig_mode();
+    //è§¦å‘æ¨¡å¼
+    server.trig_mode();
 
-	//¼àÌı
-	server.eventLoop();
+    //ç›‘å¬
+    server.eventListen();
 
-	return 0;
+    //è¿è¡Œ
+    server.eventLoop();
+
+    return 0;
 }

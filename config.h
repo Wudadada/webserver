@@ -1,4 +1,4 @@
-#ifndef
+#ifndef CONFIG_H
 #define CONFIG_H
 
 #include "webserver.h"
@@ -8,43 +8,40 @@ using namespace std;
 class Config
 {
 public:
-	Config();
-	~Config() {};
+    Config();
+    ~Config(){};
 
-	void parse_arg(int argc, char* argv[]);
+    void parse_arg(int argc, char*argv[]);
 
-	//¶Ë¿ÚºÅ
-	int PORT;
+    //ç«¯å£å·
+    int PORT;
 
-	//ÈÕÖ¾Ğ´Èë·½Ê½
-	int LOGWrite;
+    //æ—¥å¿—å†™å…¥æ–¹å¼
+    int LOGWrite;
 
-	//´¥·¢×éºÏÄ£Ê½
-	int TRIGMode;
+    //è§¦å‘ç»„åˆæ¨¡å¼
+    int TRIGMode;
 
-	//listenfd´¥·¢Ä£Ê½
-	int LISTENTrigmode;
+    //listenfdè§¦å‘æ¨¡å¼
+    int LISTENTrigmode;
 
-	//connfd´¥·¢Ä£Ê½
-	int CONNTrigmode;
+    //connfdè§¦å‘æ¨¡å¼
+    int CONNTrigmode;
 
-	//ÓÅÑÅ¹Ø±ÕÁ¬½Ó
-	int OPT_LINGER;
+    //ä¼˜é›…å…³é—­é“¾æ¥
+    int OPT_LINGER;
 
-	//Êı¾İ¿âÁ¬½Ó³ØÊıÁ¿ 
-	int sql_num;
+    //æ•°æ®åº“è¿æ¥æ± æ•°é‡
+    int sql_num;
 
-	//Ïß³Ì³ØÄÚµÄÏß³ÌÊıÁ¿
-	int thread_num;
+    //çº¿ç¨‹æ± å†…çš„çº¿ç¨‹æ•°é‡
+    int thread_num;
 
-	//ÊÇ·ñ¹Ø±ÕÈÕÖ¾
-	int close_log;
+    //æ˜¯å¦å…³é—­æ—¥å¿—
+    int close_log;
 
-	//²¢·¢Ä£ĞÍÑ¡Ôñ
-	int actor_model;
-
+    //å¹¶å‘æ¨¡å‹é€‰æ‹©
+    int actor_model;
 };
 
 #endif
-
-

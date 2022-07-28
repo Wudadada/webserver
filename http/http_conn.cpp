@@ -3,794 +3,700 @@
 #include <mysql/mysql.h>
 #include <fstream>
 
-//¶¨ÒåhttpÏìÓ¦µÄÒ»Ğ©×´Ì¬ĞÅÏ¢
-const char* ok_200_title = "OK";
-const char* error_400_title = "Bad Request";
-const char* error_400_form = "Your request has bad syntax or is inherently impossible to satisfy.\n";
-const char* error_403_title = "Forbidden";
-const char* error_403_form = "You do not have permission to get file form this server.\n";
-const char* error_404_title = "Not Found";
-const char* error_404_form = "The requested file was not found on this server.\n";
-const char* error_500_title = "Internal Error";
-const char* error_500_form = "There was an unusual problem serving the request file.\n";
+//å®šä¹‰httpå“åº”çš„ä¸€äº›çŠ¶æ€ä¿¡æ¯
+const char *ok_200_title = "OK";
+const char *error_400_title = "Bad Request";
+const char *error_400_form = "Your request has bad syntax or is inherently impossible to staisfy.\n";
+const char *error_403_title = "Forbidden";
+const char *error_403_form = "You do not have permission to get file form this server.\n";
+const char *error_404_title = "Not Found";
+const char *error_404_form = "The requested file was not found on this server.\n";
+const char *error_500_title = "Internal Error";
+const char *error_500_form = "There was an unusual problem serving the request file.\n";
 
 locker m_lock;
 map<string, string> users;
 
-void http_conn::initmysql_result(connection_pool* connPool)
+void http_conn::initmysql_result(connection_pool *connPool)
 {
-	//ÏÈ´ÓÁ¬½Ó³ØÈ¡Ò»¸öÁ¬½Ó
-	MYSQL* mysql = nullptr;
-	connectionRAII mysqlcon(&mysql, connPool);
+    //å…ˆä»è¿æ¥æ± ä¸­å–ä¸€ä¸ªè¿æ¥
+    MYSQL *mysql = NULL;
+    connectionRAII mysqlcon(&mysql, connPool);
 
-	//ÔÚuser±íÖĞ¼ìË÷username, passwdÊı¾İ£¬ä¯ÀÀÆ÷¶ËÊäÈë
-	if (mysql_query(mysql, "SELECT user,passwd FROM user"))
-	{
-		LOG_ERROR("SELECT error:%s\n", mysql_error(mysql));
-	}
+    //åœ¨userè¡¨ä¸­æ£€ç´¢usernameï¼Œpasswdæ•°æ®ï¼Œæµè§ˆå™¨ç«¯è¾“å…¥
+    if (mysql_query(mysql, "SELECT username,passwd FROM user"))
+    {
+        LOG_ERROR("SELECT error:%s\n", mysql_error(mysql));
+    }
 
-	//´Ó±íÖĞ¼ìË÷ÍêÕûµÄ½á¹û¼¯
-	MYSQL_RES* result = mysql_store_result(mysql);
+    //ä»è¡¨ä¸­æ£€ç´¢å®Œæ•´çš„ç»“æœé›†
+    MYSQL_RES *result = mysql_store_result(mysql);
 
-	//·µ»Ø½á¹û¼¯ÖĞµÄÁĞÊı
-	int num_fields = mysql_num_fields(result);
+    //è¿”å›ç»“æœé›†ä¸­çš„åˆ—æ•°
+    int num_fields = mysql_num_fields(result);
 
-	//·µ»ØËùÓĞ×Ö¶Î½á¹¹µÄÊı×é
-	MYSQL_FIELD* fields = mysql_fetch_fields(result);
+    //è¿”å›æ‰€æœ‰å­—æ®µç»“æ„çš„æ•°ç»„
+    MYSQL_FIELD *fields = mysql_fetch_fields(result);
 
-	//´Ó½á¹û¼¯ÖĞ»ñÈ¡ÏÂÒ»ĞĞ£¬½«¶ÔÓ¦µÄÓÃ»§ÃûºÍÃÜÂë´æÈëmapÖĞ 
-	while (MYSQL_ROW row = mysql_fetch_row(result))
-	{
-		string temp1(row[0]);
-		string temp2(row[1]);
-		users[temp1] = temp2;
-	}
+    //ä»ç»“æœé›†ä¸­è·å–ä¸‹ä¸€è¡Œï¼Œå°†å¯¹åº”çš„ç”¨æˆ·åå’Œå¯†ç ï¼Œå­˜å…¥mapä¸­
+    while (MYSQL_ROW row = mysql_fetch_row(result))
+    {
+        string temp1(row[0]);
+        string temp2(row[1]);
+        users[temp1] = temp2;
+    }
 }
 
-//¶ÔÎÄ¼şÃèÊö·ûÉèÖÃ·Ç×èÈû
+//å¯¹æ–‡ä»¶æè¿°ç¬¦è®¾ç½®éé˜»å¡
 int setnonblocking(int fd)
 {
-	int old_option = fcntl(fd, F_GETFL);//ÉèÖÃÎÄ¼ş×´Ì¬±ê¼Ç
-	int new_option = old_option | O_NONBLOCK;
-	fcntl(fd, F_SETFL, new_option);
-	return old_option;
+    int old_option = fcntl(fd, F_GETFL);
+    int new_option = old_option | O_NONBLOCK;
+    fcntl(fd, F_SETFL, new_option);
+    return old_option;
 }
 
-//½«ÄÚºËÊÂ¼ş±í×¢²á¶ÁÊÂ¼ş£¬ETÄ£Ê½£¬Ñ¡Ôñ¿ªÆôEPOLLONESHOT
+//å°†å†…æ ¸äº‹ä»¶è¡¨æ³¨å†Œè¯»äº‹ä»¶ï¼ŒETæ¨¡å¼ï¼Œé€‰æ‹©å¼€å¯EPOLLONESHOT
 void addfd(int epollfd, int fd, bool one_shot, int TRIGMode)
 {
-	epoll_event event;
-	event.data.fd = fd;
+    epoll_event event;
+    event.data.fd = fd;
 
-	if (1 == TRIGMode)//ET
-		event.events = EPOLLIN | EPOLLET | EPOLLRDHUP
-	else
-		event.events = EPOLLIN | EPOLLRDHUP;
+    if (1 == TRIGMode)
+        event.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
+    else
+        event.events = EPOLLIN | EPOLLRDHUP;
 
-	if (one_shot)
-		event.events |= EPOLLONESHOT;
-	epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &event);
+    if (one_shot)
+        event.events |= EPOLLONESHOT;
+    epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &event);
+    setnonblocking(fd);
 }
 
-//´ÓÄÚºËÊ±¼ä±íÉ¾³ıÃèÊö·û
+//ä»å†…æ ¸æ—¶é—´è¡¨åˆ é™¤æè¿°ç¬¦
 void removefd(int epollfd, int fd)
 {
-	epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, 0);
-	close(fd);
+    epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, 0);
+    close(fd);
 }
 
-
-
-//½«ÊÂ¼şÖØÖÃÎªEPOLLONESHOT
+//å°†äº‹ä»¶é‡ç½®ä¸ºEPOLLONESHOT
 void modfd(int epollfd, int fd, int ev, int TRIGMode)
 {
-	epoll_event event;
-	event.data.fd = fd;
+    epoll_event event;
+    event.data.fd = fd;
 
-	if (1 == TRIGMode)
-		event.events = ev | EPOLLET | EPOLLONESHOT | EPOLLRDHUP;
-	else
-		event.events = ev | EPOLLONESHOT | EPOLLRDHUP;
+    if (1 == TRIGMode)
+        event.events = ev | EPOLLET | EPOLLONESHOT | EPOLLRDHUP;
+    else
+        event.events = ev | EPOLLONESHOT | EPOLLRDHUP;
 
-	epoll_ctl(epollfd, EPOLL_CTL_MODE, fd, &event);
+    epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &event);
 }
 
 int http_conn::m_user_count = 0;
 int http_conn::m_epollfd = -1;
 
-//¹Ø±ÕÒ»¸öÁ¬½Ó£¬¿Í»§×ÜÁ¿¼õÒ»
+//å…³é—­è¿æ¥ï¼Œå…³é—­ä¸€ä¸ªè¿æ¥ï¼Œå®¢æˆ·æ€»é‡å‡ä¸€
 void http_conn::close_conn(bool real_close)
 {
-	if (real_close && (m_sockfd != -1))
-	{
-		printf("close %d\n", m_sockfd);
-		removefd(m_epollfd, m_sockfd);
-		m_sockfd = -1;//Ê²Ã´ÓÃ
-		m_user_count--;
-	}
+    if (real_close && (m_sockfd != -1))
+    {
+        printf("close %d\n", m_sockfd);
+        removefd(m_epollfd, m_sockfd);
+        m_sockfd = -1;
+        m_user_count--;
+    }
 }
 
-//³õÊ¼»¯Á¬½Ó£¬Íâ²¿µ÷ÓÃ³õÊ¼»¯Ì×½Ó×ÖµØÖ·
-void http_conn::init(int sockfd, const sockaddr_in& addr, char* root, int TRIGMode,
-	int close_log, string user, string passwd, string sqlname)
+//åˆå§‹åŒ–è¿æ¥,å¤–éƒ¨è°ƒç”¨åˆå§‹åŒ–å¥—æ¥å­—åœ°å€
+void http_conn::init(int sockfd, const sockaddr_in &addr, char *root, int TRIGMode,
+                     int close_log, string user, string passwd, string sqlname)
 {
-	m_sockfd = sockfd;
-	m_address = addr;
+    m_sockfd = sockfd;
+    m_address = addr;
 
-	addfd(m_epollfd, sockfd, true, m_TRIGMode);
-	m_user_count++;
+    addfd(m_epollfd, sockfd, true, m_TRIGMode);
+    m_user_count++;
 
-	//µ±ä¯ÀÀÆ÷³öÏÖÁ¬½ÓÖØÖÃÊ±£¬¿ÉÄÜÊÇÍøÕ¾¸ùÄ¿Â¼³ö´í»òhttpÏìÓ¦¸ñÊ½³ö´í»ò·ÃÎÊµÄÎÄ¼şÖĞÄÚÈİÍêÈ«Îª¿Õ
-	doc_root = root;
-	m_TRIGMode = TRIGMode;
-	m_close_log = close_log;
+    //å½“æµè§ˆå™¨å‡ºç°è¿æ¥é‡ç½®æ—¶ï¼Œå¯èƒ½æ˜¯ç½‘ç«™æ ¹ç›®å½•å‡ºé”™æˆ–httpå“åº”æ ¼å¼å‡ºé”™æˆ–è€…è®¿é—®çš„æ–‡ä»¶ä¸­å†…å®¹å®Œå…¨ä¸ºç©º
+    doc_root = root;
+    m_TRIGMode = TRIGMode;
+    m_close_log = close_log;
 
-	strcpy(sql_user, user.c_str());
-	strcpy(sql_passwd, passwd.c_str());
-	strcpy(sql_name, sqlname.c_str());
-	
-	init();
+    strcpy(sql_user, user.c_str());
+    strcpy(sql_passwd, passwd.c_str());
+    strcpy(sql_name, sqlname.c_str());
+
+    init();
 }
 
-//³õÊ¼»¯ĞÂ½ÓÊÜµÄÁ¬½Ó
-//check_stateÄ¬ÈÏÎª·ÖÎöÇëÇóĞĞ×´Ì¬
+//åˆå§‹åŒ–æ–°æ¥å—çš„è¿æ¥
+//check_stateé»˜è®¤ä¸ºåˆ†æè¯·æ±‚è¡ŒçŠ¶æ€
 void http_conn::init()
 {
-	mysql = NULL;
-	bytes_to_send = 0;
-	bytes_have_send = 0;
-	m_check_state = CHECK_STATE_REQUESTLINE;
-	m_linger = false;
-	m_method = GET;
-	m_url = 0;
-	m_version = 0;
-	m_content_length = 0;
-	m_host = 0;
-	m_start_line = 0;
-	m_checked_idx = 0;
-	m_read_idx = 0;
-	m_write_idx = 0;
-	cgi = 0;
-	m_state = 0;
-	timer_flag = 0;
-	improv = 0;
+    mysql = NULL;
+    bytes_to_send = 0;
+    bytes_have_send = 0;
+    m_check_state = CHECK_STATE_REQUESTLINE;
+    m_linger = false;
+    m_method = GET;
+    m_url = 0;
+    m_version = 0;
+    m_content_length = 0;
+    m_host = 0;
+    m_start_line = 0;
+    m_checked_idx = 0;
+    m_read_idx = 0;
+    m_write_idx = 0;
+    cgi = 0;
+    m_state = 0;
+    timer_flag = 0;
+    improv = 0;
 
-	memset(m_read_buf, '\0', READ_BUFFER_SIZE);
-	memset(m_write_buf, '\0', WRITE_BUFFER_SIZE);
-	memset(m_real_life, '\0', FILENAME_LEN);
+    memset(m_read_buf, '\0', READ_BUFFER_SIZE);
+    memset(m_write_buf, '\0', WRITE_BUFFER_SIZE);
+    memset(m_real_file, '\0', FILENAME_LEN);
 }
 
-//´Ó×´Ì¬»ú£¬ÓÃÓÚ·ÖÎö³öÒ»ĞĞÄÚÈİ
-//·µ»ØÖµÎªĞĞµÄ¶ÁÈ¡×´Ì¬£¬ÓĞLINE_OK,LINE_BAD,LINE_OPEN
+//ä»çŠ¶æ€æœºï¼Œç”¨äºåˆ†æå‡ºä¸€è¡Œå†…å®¹
+//è¿”å›å€¼ä¸ºè¡Œçš„è¯»å–çŠ¶æ€ï¼Œæœ‰LINE_OK,LINE_BAD,LINE_OPEN
 http_conn::LINE_STATUS http_conn::parse_line()
 {
-	char temp;
-	for (; m_checked_idx < m_read_idx; ++m_checked_idx)//´Ó×´Ì¬»úÔÚbufferÖĞ¶ÁÈ¡µÄÎ»ÖÃm_checked_idx
-	{
-		temp = m_read_buf[m_checked_idx];
-		if (temp == '\r')//»Ø³µ
-		{	
-
-			//ÏÂÒ»¸ö×Ö·û´ïµ½ÁËbuffer½áÎ²£¬Ôò½ÓÊÕ²»ÍêÕû£¬ĞèÒª¼ÌĞø½ÓÊÕ
-			if ((m_checked_idx + 1) == m_read_idx)
-				return LINE_OPEN;
-			else if (m_read_buf[m_checked_idx + 1] == '\n')
-			{
-				m_read_buf[m_checked_idx++] = '\0';
-				m_read_buf[m_checked_idx++] = '\0';
-				return LINE_OK;
-			}
-			return LINE_BAD;
-		}
-
-		//Èç¹ûµ±Ç°×Ö·ûÊÇ\n£¬Ò²ÓĞ¿ÉÄÜ¶ÁÈ¡µ½ÍêÕûĞĞ
-		//Ò»°ãÊÇÉÏ´Î¶ÁÈ¡µ½\r¾Íµ½bufferÄ©Î²ÁË£¬Ã»ÓĞ½ÓÊÕÍêÕû£¬ÔÙ´Î½ÓÊÕÊ±»á³öÏÖÕâÖÖÇé¿ö
-		else if (temp == '\n')
-		{
-			//Ç°Ò»¸ö×Ö·ûÊÇ\r£¬Ôò½ÓÊÕÍêÕû
-			if (m_checked_idx > 1 && m_read_buf[m_checked_idx - 1] == '\r')
-			{
-				m_read_buf[m_checked_idx - 1] = '\0';
-				m_read_buf[m_checked_idx++] = '\0';
-				return LINE_OK;
-			}
-			return LINE_BAD;
-		}
-	}
-	return LINE_OPEN;//²¢Ã»ÓĞÕÒµ½\r\n£¬ĞèÒª¼ÌĞø½ÓÊÕ
+    char temp;
+    for (; m_checked_idx < m_read_idx; ++m_checked_idx)
+    {
+        temp = m_read_buf[m_checked_idx];
+        if (temp == '\r')
+        {
+            if ((m_checked_idx + 1) == m_read_idx)
+                return LINE_OPEN;
+            else if (m_read_buf[m_checked_idx + 1] == '\n')
+            {
+                m_read_buf[m_checked_idx++] = '\0';
+                m_read_buf[m_checked_idx++] = '\0';
+                return LINE_OK;
+            }
+            return LINE_BAD;
+        }
+        else if (temp == '\n')
+        {
+            if (m_checked_idx > 1 && m_read_buf[m_checked_idx - 1] == '\r')
+            {
+                m_read_buf[m_checked_idx - 1] = '\0';
+                m_read_buf[m_checked_idx++] = '\0';
+                return LINE_OK;
+            }
+            return LINE_BAD;
+        }
+    }
+    return LINE_OPEN;
 }
 
-//Ñ­»·¶ÁÈ¡¿Í»§Êı¾İ£¬ÖªµÀÎŞÊı¾İ¿É¶Á»ò¶Ô·½¹Ø±ÕÁ¬½Ó
-//·Ç×èÈûET¹¤×÷Ä£Ê½ÏÂ£¬ĞèÒªÒ»´ÎĞÔ½«Êı¾İ¶ÁÍê
+//å¾ªç¯è¯»å–å®¢æˆ·æ•°æ®ï¼Œç›´åˆ°æ— æ•°æ®å¯è¯»æˆ–å¯¹æ–¹å…³é—­è¿æ¥
+//éé˜»å¡ETå·¥ä½œæ¨¡å¼ä¸‹ï¼Œéœ€è¦ä¸€æ¬¡æ€§å°†æ•°æ®è¯»å®Œ
 bool http_conn::read_once()
 {
-	if (m_read_idx >= READ_BUFFER_SIZE)
-	{
-		return false;
-	}
-	int bytes_read = 0;
+    if (m_read_idx >= READ_BUFFER_SIZE)
+    {
+        return false;
+    }
+    int bytes_read = 0;
 
-	//LT¶ÁÈ¡Êı¾İ
-	if (0 == m_TRIGMode)
-	{
-		bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
-		m_read_idx += bytes_read;
+    //LTè¯»å–æ•°æ®
+    if (0 == m_TRIGMode)
+    {
+        bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
+        m_read_idx += bytes_read;
 
-		if (bytes_read <= 0)
-		{
-			return false;
-		}
+        if (bytes_read <= 0)
+        {
+            return false;
+        }
 
-		return true;
-	}
-
-	//ET¶ÁÊı¾İ
-	else
-	{
-		while (true)
-		{
-			bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
-			if (bytes_read == -1)
-			{
-				if (errno == EAGAIN || errno == EWOULDBLOCK)
-					break;
-				return false;
-			}
-			else if (bytes_read == 0)
-			{
-				return false;
-			}
-			m_read_idx += bytes_read;
-		}
-
-		return true;
-	}
+        return true;
+    }
+    //ETè¯»æ•°æ®
+    else
+    {
+        while (true)
+        {
+            bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
+            if (bytes_read == -1)
+            {
+                if (errno == EAGAIN || errno == EWOULDBLOCK)
+                    break;
+                return false;
+            }
+            else if (bytes_read == 0)
+            {
+                return false;
+            }
+            m_read_idx += bytes_read;
+        }
+        return true;
+    }
 }
 
-//½âÎöhttpÇëÇóĞĞ£¬»ñµÃÇëÇó·½·¨£¬Ä¿±êurl¼°http°æ±¾ºÅ
-http_conn::HTTP_CODE http_conn::parse_request_line(char* text)
-{	//ÔÚHTTP±¨ÎÄÖĞ£¬ÇëÇóĞĞÓÃÀ´ËµÃ÷ÇëÇóÀàĞÍ,Òª·ÃÎÊµÄ×ÊÔ´ÒÔ¼°ËùÊ¹ÓÃµÄHTTP°æ±¾£¬ÆäÖĞ¸÷¸ö²¿·ÖÖ®¼äÍ¨¹ı\t»ò¿Õ¸ñ·Ö¸ô¡£
-	//ÇëÇóĞĞÖĞ×îÏÈº¬ÓĞ¿Õ¸ñºÍ\tÈÎÒ»×Ö·ûµÄÎ»ÖÃ²¢·µ»Ø
-	m_url = strpbrk(text, " \t");
-
-	//Èç¹ûÃ»ÓĞ¿Õ¸ñ»ò\t,Ôò±¨ÎÄ¸ñÊ½ÓĞÎó
-	if (!m_url)
-	{
-		return BAD_REQUEST;
-	}
-	//½«¸ÃÎ»ÖÃ¸ÄÎª\0£¬ÓÃÓÚ½«Ç°ÃæÊı¾İÈ¡³ö
-	*m_url++ = '\0';
-
-	//È¡³öÊı¾İ£¬²¢Í¨¹ıÓëGETºÍPOST±È½Ï£¬ÒÔÈ·¶¨ÇëÇó·½Ê½
-	char* method = text;
-	if (strcasecmp(method, "GET") == 0)//strcasecmp¶ÁÈ¡µ½\0»áÍ£Ö¹£¨²»°üº¬\0)
-		m_method = GET;
-	else if (strcasecmp(method, "POST") == 0)
-	{
-		m_method = POST;
-		cgi = 1;
-	}
-	else
-		return BAD_REQUEST;
-
-
-	//m_url´ËÊ±Ìø¹ıÁËµÚÒ»¸ö¿Õ¸ñ»ò\t×Ö·û£¬µ«²»ÖªµÀÖ®ºóÊÇ·ñ»¹ÓĞ
-	//½«m_urlÏòºóÆ«ÒÆ£¬Í¨¹ı²éÕÒ£¬¼ÌĞøÌø¹ı¿Õ¸ñºÍ\t×Ö·û£¬Ö¸ÏòÇëÇó×ÊÔ´µÄµÚÒ»¸ö×Ö·û
-	m_url += strspn(m_url, " \t");
-
-	//Ê¹ÓÃÓëÅĞ¶ÏÇëÇó·½Ê½µÄÏàÍ¬Âß¼­£¬ÅĞ¶ÏHTTP°æ±¾ºÅ
-	m_version = strpbrk(m_url, " \t");
-	if (!m_version)
-		return BAD_REQUEST;
-	*m_version++ = '\0';
-	m_version += strspn(m_version, " \t");
-
-	//½öÖ§³ÖHTTP/1.1
-	if (strcasecmp(m_version, "HTTP/1.1") != 0)
-		return BAD_REQUEST;
-
-	//¶ÔÇëÇó×ÊÔ´Ç°7¸ö×Ö·û½øĞĞÅĞ¶Ï
-	//ÕâÀïÖ÷ÒªÊÇÓĞĞ©±¨ÎÄµÄÇëÇó×ÊÔ´ÖĞ»á´øÓĞhttp://£¬ÕâÀïĞèÒª¶ÔÕâÖÖÇé¿ö½øĞĞµ¥¶À´¦Àí
-	if (strncasecpm(m_url, "http://", 7) == 0)
-	{
-		m_url += 7;
-		m_url = strchr(m_url, '/');
-	}
-
-	//Í¬ÑùÔö¼ÓhttpsÇé¿ö
-	if (strncasecmp(m_url, "https://", 8) == 0)
-	{
-		m_url += 8;
-		m_url = strchr(m_url, '/');
-	}
-
-	//Ò»°ãµÄ²»»á´øÓĞÉÏÊöÁ½ÖÖ·ûºÅ£¬Ö±½ÓÊÇµ¥¶ÀµÄ/»ò/ºóÃæ´ø·ÃÎÊ×ÊÔ´
-	if (!m_url || m_url[0] != '/')
-		return BAD_REQUEST;
-
-	//µ±urlÎª/Ê±£¬ÏÔÊ¾»¶Ó­½çÃæ
-	if (strlen(m_url) == 1)
-		strcat(m_url, "judge.html");
-
-	//ÇëÇóĞĞ´¦ÀíÍê±Ï£¬½«Ö÷×´Ì¬»ú×ªÒÆ´¦ÀíÇëÇóÍ·
-	m_check_state = CHECK_STATE_HEADER;
-	return NO_REQUEST;
-}
-
-http_conn::HTTP_CODE http_conn::parse_headers(char* text)
+//è§£æhttpè¯·æ±‚è¡Œï¼Œè·å¾—è¯·æ±‚æ–¹æ³•ï¼Œç›®æ ‡urlåŠhttpç‰ˆæœ¬å·
+http_conn::HTTP_CODE http_conn::parse_request_line(char *text)
 {
-	//ÅĞ¶ÏÊÇ¿ÕĞĞ»¹ÊÇÇëÇóÍ·
-	if (text[0] == '\0')
-	{
-		//ÅĞ¶ÏÊÇ¿ÕĞĞ»¹ÊÇÇëÇóÍ·
-		if (m_content_length != 0)
-		{
-			//POSTĞèÒªÌø×ªµ½ÏûÏ¢Ìå´¦Àí×´Ì¬
-			m_check_state = CHECK_STATE_CONTENT;
-			return NO_REQUEST;
-		}
-		return GET_REQUEST;
-	}
-	//½âÎöÇëÇóÍ·²¿Á¬½Ó×Ö¶Î
-	else if (strncasecmp(text, "Connection:", 11) == 0)
-	{
-		text += 11;
+    m_url = strpbrk(text, " \t");
+    if (!m_url)
+    {
+        return BAD_REQUEST;
+    }
+    *m_url++ = '\0';
+    char *method = text;
+    if (strcasecmp(method, "GET") == 0)
+        m_method = GET;
+    else if (strcasecmp(method, "POST") == 0)
+    {
+        m_method = POST;
+        cgi = 1;
+    }
+    else
+        return BAD_REQUEST;
+    m_url += strspn(m_url, " \t");
+    m_version = strpbrk(m_url, " \t");
+    if (!m_version)
+        return BAD_REQUEST;
+    *m_version++ = '\0';
+    m_version += strspn(m_version, " \t");
+    if (strcasecmp(m_version, "HTTP/1.1") != 0)
+        return BAD_REQUEST;
+    if (strncasecmp(m_url, "http://", 7) == 0)
+    {
+        m_url += 7;
+        m_url = strchr(m_url, '/');
+    }
 
-		//Ìø¹ı¿Õ¸ñºÍ\t×Ö·û
-		text += strspn(text, " \t");
-		if (strcasecmp(text, "keep-alive") == 0)
-		{
-			//Èç¹ûÊÇ³¤Á¬½Ó£¬Ôò½«linger±êÖ¾ÉèÖÃÎªtrue
-			m_linger = true;
-		}
-	}
-	//½âÎöÇëÇóÍ·²¿ÄÚÈİ³¤¶È×Ö¶Î
-	else if (strncasecmp(text, "Content-length:", 15) == 0)
-	{
-		text += 15;
-		text + strspn(text, " \t");
-		m_content_length = atol(text);
-	}
-	//½âÎöÇëÇóÍ·²¿HOST×Ö¶Î
-	else if (strncasecmp(text, "Host:", 5) == 0)
-	{
-		text += 5;
-		text += strspn(text, " \t");
-		m_host = text;
-	}
-	else {
-		printf("unknown header: %s\n", text);
-	}
-	return NO_REQUEST;
+    if (strncasecmp(m_url, "https://", 8) == 0)
+    {
+        m_url += 8;
+        m_url = strchr(m_url, '/');
+    }
+
+    if (!m_url || m_url[0] != '/')
+        return BAD_REQUEST;
+    //å½“urlä¸º/æ—¶ï¼Œæ˜¾ç¤ºåˆ¤æ–­ç•Œé¢
+    if (strlen(m_url) == 1)
+        strcat(m_url, "judge.html");
+    m_check_state = CHECK_STATE_HEADER;
+    return NO_REQUEST;
 }
 
-//ÅĞ¶ÏhttpÇëÇóÊÇ·ñ±»ÍêÕû¶ÁÈë
-http_conn::HTTP_CODE http_conn::parse_content(char* text)
+//è§£æhttpè¯·æ±‚çš„ä¸€ä¸ªå¤´éƒ¨ä¿¡æ¯
+http_conn::HTTP_CODE http_conn::parse_headers(char *text)
 {
-	if (m_read_idx >= (m_content_length + m_checked_idx))
-	{
-		text[m_content_length] = '\0';
-		//POSTÇëÇóÖĞ×îºóÎªÊäÈëµÄÓÃ»§ÃûºÍÃÜÂë
-		m_string = text;
-		return GET_REQUEST;
-	}
-	return NO_REQUEST;
+    if (text[0] == '\0')
+    {
+        if (m_content_length != 0)
+        {
+            m_check_state = CHECK_STATE_CONTENT;
+            return NO_REQUEST;
+        }
+        return GET_REQUEST;
+    }
+    else if (strncasecmp(text, "Connection:", 11) == 0)
+    {
+        text += 11;
+        text += strspn(text, " \t");
+        if (strcasecmp(text, "keep-alive") == 0)
+        {
+            m_linger = true;
+        }
+    }
+    else if (strncasecmp(text, "Content-length:", 15) == 0)
+    {
+        text += 15;
+        text += strspn(text, " \t");
+        m_content_length = atol(text);
+    }
+    else if (strncasecmp(text, "Host:", 5) == 0)
+    {
+        text += 5;
+        text += strspn(text, " \t");
+        m_host = text;
+    }
+    else
+    {
+        LOG_INFO("oop!unknow header: %s", text);
+    }
+    return NO_REQUEST;
 }
 
-http_CONN::HTTP_CODE http_conn::process_read()
+//åˆ¤æ–­httpè¯·æ±‚æ˜¯å¦è¢«å®Œæ•´è¯»å…¥
+http_conn::HTTP_CODE http_conn::parse_content(char *text)
 {
-	LINE_STATUS line_status = LINE_OK;
-	HTTP_CODE ret = NO_REQUEST;
-	char* text = 0;
-
-
-
-	while ((m_check_state == CHECK_STATE_CONTENT && line_status == LINE_OK) || ((line_status = parse_line()) == LINE_OK))
-	{
-		text = get_line();
-
-
-
-		m_start_line = m_checked_idx;
-
-
-		switch (m_check_state)
-		{
-			case CHECK_STATE_REQUESTLINE:
-			{
-				//½âÎöÇëÇóĞĞ
-				ret = parse_request_line(text);
-				if (ret == BAD_REQUEST)
-					return BAD_REQUEST;
-				break;
-			}
-			case CHECK_STATE_HEADER:
-			{
-				//½âÎöÇëÇóÍ·
-				ret = parse_headers(text);
-				if (ret == BAD_REQUEST)
-					return BAD_REQUEST;
-
-				//ÍêÕû½âÎöGETÇëÇóºó£¬Ìø×ªµ½±¨ÎÄÏìÓ¦º¯Êı
-				else if (ret == GET_REQUEST)
-				{
-					return do_request();
-				}
-				break;
-			}
-			case CHECK_STATE_CONTENT:
-			{
-				//½âÎöÏûÏ¢Ìå
-				ret = parse_content(text);
-
-
-				//ÍêÕû½âÎöPOSTÇëÇóºó£¬Ìø×ªµ½±¨ÎÄÏìÓ¦º¯Êı
-				if (ret == GET_REQUEST)
-					return do_request();
-
-				//½âÎöÍêÏûÏ¢Ìå¼´Íê³É±¨ÎÄ½âÎö£¬±ÜÃâÔÙ´Î½øÈëÑ­»·£¬¸üĞÂline_status;
-				line_status = LINE_OPEN;
-				break;
-			}
-			default:
-				return INTERNAL_ERROR;
-		}
-	}
-
-	return NO_REQUEST;
+    if (m_read_idx >= (m_content_length + m_checked_idx))
+    {
+        text[m_content_length] = '\0';
+        //POSTè¯·æ±‚ä¸­æœ€åä¸ºè¾“å…¥çš„ç”¨æˆ·åå’Œå¯†ç 
+        m_string = text;
+        return GET_REQUEST;
+    }
+    return NO_REQUEST;
 }
 
-http_conn::HTTP_CODE http_conn : do_request()
-{	
-	//½«³õÊ¼»¯µÄm_real_file¸³ÖµÎªÍøÕ¾¸ùÄ¿Â¼
-	strcpy(m_real_file, doc_root);
-	int len = strlen(doc_root);
-
-	//ÕÒµ½m_urlÖĞ/µÄÎ»ÖÃ
-	const char* p = strrchr(m_url, '/');
-
-	//ÊµÏÖµÇÂ¼ºÍ×¢²áĞ£Ñé
-	if (cgi == 1 && (*(p + 1) == '2' || *(p + 1) == '3'))
-	{
-		//¸ù¾İ±êÖ¾ÅĞ¶ÏÊÇµÇÂ¼¼ì²â»¹ÊÇ×¢²á¼ì²â
-		char flag = m_url[1];
-
-		char* m_url_real = (char*)malloc(sizeof(char) * 200);
-		strcpy(m_url_real, "/");
-		strcat(m_url_real, m_url + 2);
-		strncpy(m_real_file + len, m_url_real, FILENAME_LEN - len - 1);
-		free(m_url_real);
-
-		//½«ÓÃ»§ÃûºÍÃÜÂëÌáÈ¡³öÀ´
-		char name[100], password[100];
-		int i;
-		for (i = 5; m_string[i] != '&'; ++i)
-			name[i - 5] = m_string[i];
-		name[i - 5] = '\0';
-
-		int j = 0;
-		for (i = i + 10; m_string[i] != '\0'; ++i, ++j)
-			password[j] = '\0';
-
-		if (*(p + 1) == '3')
-		{
-			//Èç¹ûÊÇ×¢²á£¬ ÏÈ¼ì²âÊı¾İ¿âÖĞÊÇ·ñÓĞÖØÃûµÄ
-			//Ã»ÓĞÖØÃûµÄ£¬½øĞĞÔö¼ÓÊı¾İ
-			char* sql_insert = (char*)malloc(sizeof(char) * 200);
-			strcpy(sql_insert, "INSERT INTO user(username, passwd) VALUES(");
-			strcat(sql_insert, "'");
-			strcat(sql_insert, name);
-			strcat(sql_insert, "', '");
-			strcat(sql_insert, password);
-			strcat(sql_insert, "')");
-			
-			if (users.find(name) == ueses.end())
-			{
-				m_lock.lock();
-				int res = mysql_query(mysql, sql_insert);
-				users.insert(pair<string, string>(name, password));
-				m_lock.unlock();
-
-				if (!res)
-					strcpy(m_url, "/log.html";
-				else
-						strcpy(m_url, "/registerError.html");
-			}
-			else
-						strcpy(m_url, "/registerError.html");
-
-		}
-		//Èç¹ûÊÇµÇÂ¼£¬Ö±½ÓÅĞ¶Ï
-		//Èôä¯ÀÀÆ÷¶ËÊäÈëµÄÓÃ»§ÃûºÍÃÜÂëÔÚ±íÖĞ¿ÉÒÔ²éÕÒµ½£¬·µ»Ø1£¬·ñÔò·µ»Ø0
-		else if (*(p + 1) == '2')
-		{
-			if (user.find(name) != user.end() && users[name] == password)
-				strcpy(m_url, "/welcome.html");
-			else
-				strcpy(m_url, "/logError.html");
-		}
-
-		//Èç¹ûÇëÇó×ÊÔ´Îª/0±íÊ¾Ìø×ª×¢²á½çÃæ
-		if (*(p + 1) == '0')
-		{
-			char* m_url_real = (char*)malloc(sizeof(char) * 200);
-			strcpy(m_url_real, "/register.html");
-
-			//½«ÍøÕ¾Ä¿Â¼ºÍ/register.html½øĞĞÆ´½Ó£¬¸üĞÂµ½m_real_fileÖĞ
-			strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
-
-			free(m_url_real);
-		}
-		//Èç¹ûÇëÇó×ÊÔ´Îª/1, ±íÊ¾Ìø×ªµÇÂ¼½çÃæ
-		else if (*(p + 1) == '1')
-		{
-			char* m_url_real = (char*)malloc(sizeof(char) * 200);
-			strcpy(m_url_real, "/log.html");
-
-			//½«ÍøÕ¾Ä¿Â¼ºÍlog.html½øĞĞÆ´½Ó£¬¸üĞÂµ½m_real_fileÖĞ
-			strncpy(m_real_file + len, m_url_real, strlen(m_url_real);
-
-			free(m_url_real);
-		}
-		else
-				//Èç¹ûÒÔÉÏ¾ù²»·ûºÏ£¬¼È²»ÊÇµÇÂ¼ºÍ×¢²á£¬Ö±½Ó½«urlÓëÍøÕ¾Ä¿Â¼Æ´½Ó
-				//ÕâÀïµÄÇé¿öÊÇwelcome½çÃæ£¬ÇëÇó·şÎñÆ÷ÉÏµÄÒ»¸öÍ¼Æ¬
-				strncpy(m_real_file + len, m_url, FILENAME_LEN - len - 1);
-
-		//Í¨¹ıstat»ñÈ¡ÇëÇó×ÊÔ´ÎÄ¼şĞÅÏ¢£¬³É¹¦Ôò½«ĞÅÏ¢¸üĞÂµ½m_file_stat½á¹¹Ìå
-		//Ê§°Ü·µ»ØNO_RESOURCE×´Ì¬£¬±íÊ¾×ÊÔ´²»´æÔÚ
-		if (stat(m_real_file, &m_file_stat) < 0)
-			return NO_RESOURCE;
-
-		//ÅĞ¶ÏÎÄ¼şµÄÈ¨ÏŞ£¬ÊÇ·ñ¿É¶Á£¬²»¿É¶ÁÔò·µ»ØFORBIDDEN_REQUEST×´Ì¬
-		if (!(m_file_stat.st_mode & S_IROTH))
-			return FORBBIDEN_REQUEST;
-
-		//ÅĞ¶ÏÎÄ¼şÀàĞÍ£¬Èç¹ûÊÇÄ¿Â¼£¬Ôò·µ»ØBAD_REQUEST£¬±íÊ¾ÇëÇó±¨ÎÄÓĞÎó
-		if (S_ISDIR(m_file_stat.st_mode))
-			return BAD_REQUEST;
-
-		//ÒÔÖ»¶Á·½Ê½»ñÈ¡ÎÄ¼şÃèÊö·û£¬Í¨¹ı mmap½«¸ÃÎÄ¼şÓ³Éäµ½ÄÚ´æÖĞ 
-		int fd = open(m_real_file, O_RDONLY);
-		m_file_addresss = (char*)mmap(0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-
-		//±ÜÃâÎÄ¼şÃèÊö·ûµÄÀË·ÑºÍÕ¼ÓÃ
-		close(fd);
-
-		//±íÊ¾ÇëÇóÎÄ¼ş´æÔÚ£¬ÇÒ¿ÉÒÔ·ÃÎÊ
-		return FILE_REQUEST;
-	}
-}	
-
-void http_conn : unmap()
+http_conn::HTTP_CODE http_conn::process_read()
 {
-	if (m_file_address)
-	{
-		munmap(m_file_address, m_file_stat.st_size);
-		m_file_address = 0;
-	}
+    LINE_STATUS line_status = LINE_OK;
+    HTTP_CODE ret = NO_REQUEST;
+    char *text = 0;
+
+    while ((m_check_state == CHECK_STATE_CONTENT && line_status == LINE_OK) || ((line_status = parse_line()) == LINE_OK))
+    {
+        text = get_line();
+        m_start_line = m_checked_idx;
+        LOG_INFO("%s", text);
+        switch (m_check_state)
+        {
+        case CHECK_STATE_REQUESTLINE:
+        {
+            ret = parse_request_line(text);
+            if (ret == BAD_REQUEST)
+                return BAD_REQUEST;
+            break;
+        }
+        case CHECK_STATE_HEADER:
+        {
+            ret = parse_headers(text);
+            if (ret == BAD_REQUEST)
+                return BAD_REQUEST;
+            else if (ret == GET_REQUEST)
+            {
+                return do_request();
+            }
+            break;
+        }
+        case CHECK_STATE_CONTENT:
+        {
+            ret = parse_content(text);
+            if (ret == GET_REQUEST)
+                return do_request();
+            line_status = LINE_OPEN;
+            break;
+        }
+        default:
+            return INTERNAL_ERROR;
+        }
+    }
+    return NO_REQUEST;
 }
 
+http_conn::HTTP_CODE http_conn::do_request()
+{
+    strcpy(m_real_file, doc_root);
+    int len = strlen(doc_root);
+    //printf("m_url:%s\n", m_url);
+    const char *p = strrchr(m_url, '/');
+
+    //å¤„ç†cgi
+    if (cgi == 1 && (*(p + 1) == '2' || *(p + 1) == '3'))
+    {
+
+        //æ ¹æ®æ ‡å¿—åˆ¤æ–­æ˜¯ç™»å½•æ£€æµ‹è¿˜æ˜¯æ³¨å†Œæ£€æµ‹
+        char flag = m_url[1];
+
+        char *m_url_real = (char *)malloc(sizeof(char) * 200);
+        strcpy(m_url_real, "/");
+        strcat(m_url_real, m_url + 2);
+        strncpy(m_real_file + len, m_url_real, FILENAME_LEN - len - 1);
+        free(m_url_real);
+
+        //å°†ç”¨æˆ·åå’Œå¯†ç æå–å‡ºæ¥
+        //user=123&passwd=123
+        char name[100], password[100];
+        int i;
+        for (i = 5; m_string[i] != '&'; ++i)
+            name[i - 5] = m_string[i];
+        name[i - 5] = '\0';
+
+        int j = 0;
+        for (i = i + 10; m_string[i] != '\0'; ++i, ++j)
+            password[j] = m_string[i];
+        password[j] = '\0';
+
+        if (*(p + 1) == '3')
+        {
+            //å¦‚æœæ˜¯æ³¨å†Œï¼Œå…ˆæ£€æµ‹æ•°æ®åº“ä¸­æ˜¯å¦æœ‰é‡åçš„
+            //æ²¡æœ‰é‡åçš„ï¼Œè¿›è¡Œå¢åŠ æ•°æ®
+            char *sql_insert = (char *)malloc(sizeof(char) * 200);
+            strcpy(sql_insert, "INSERT INTO user(username, passwd) VALUES(");
+            strcat(sql_insert, "'");
+            strcat(sql_insert, name);
+            strcat(sql_insert, "', '");
+            strcat(sql_insert, password);
+            strcat(sql_insert, "')");
+
+            if (users.find(name) == users.end())
+            {
+                m_lock.lock();
+                int res = mysql_query(mysql, sql_insert);
+                users.insert(pair<string, string>(name, password));
+                m_lock.unlock();
+
+                if (!res)
+                    strcpy(m_url, "/log.html");
+                else
+                    strcpy(m_url, "/registerError.html");
+            }
+            else
+                strcpy(m_url, "/registerError.html");
+        }
+        //å¦‚æœæ˜¯ç™»å½•ï¼Œç›´æ¥åˆ¤æ–­
+        //è‹¥æµè§ˆå™¨ç«¯è¾“å…¥çš„ç”¨æˆ·åå’Œå¯†ç åœ¨è¡¨ä¸­å¯ä»¥æŸ¥æ‰¾åˆ°ï¼Œè¿”å›1ï¼Œå¦åˆ™è¿”å›0
+        else if (*(p + 1) == '2')
+        {
+            if (users.find(name) != users.end() && users[name] == password)
+                strcpy(m_url, "/welcome.html");
+            else
+                strcpy(m_url, "/logError.html");
+        }
+    }
+
+    if (*(p + 1) == '0')
+    {
+        char *m_url_real = (char *)malloc(sizeof(char) * 200);
+        strcpy(m_url_real, "/register.html");
+        strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
+
+        free(m_url_real);
+    }
+    else if (*(p + 1) == '1')
+    {
+        char *m_url_real = (char *)malloc(sizeof(char) * 200);
+        strcpy(m_url_real, "/log.html");
+        strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
+
+        free(m_url_real);
+    }
+    else if (*(p + 1) == '5')
+    {
+        char *m_url_real = (char *)malloc(sizeof(char) * 200);
+        strcpy(m_url_real, "/picture.html");
+        strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
+
+        free(m_url_real);
+    }
+    else if (*(p + 1) == '6')
+    {
+        char *m_url_real = (char *)malloc(sizeof(char) * 200);
+        strcpy(m_url_real, "/video.html");
+        strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
+
+        free(m_url_real);
+    }
+    else if (*(p + 1) == '7')
+    {
+        char *m_url_real = (char *)malloc(sizeof(char) * 200);
+        strcpy(m_url_real, "/fans.html");
+        strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
+
+        free(m_url_real);
+    }
+    else
+        strncpy(m_real_file + len, m_url, FILENAME_LEN - len - 1);
+
+    if (stat(m_real_file, &m_file_stat) < 0)
+        return NO_RESOURCE;
+
+    if (!(m_file_stat.st_mode & S_IROTH))
+        return FORBIDDEN_REQUEST;
+
+    if (S_ISDIR(m_file_stat.st_mode))
+        return BAD_REQUEST;
+
+    int fd = open(m_real_file, O_RDONLY);
+    m_file_address = (char *)mmap(0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    close(fd);
+    return FILE_REQUEST;
+}
+void http_conn::unmap()
+{
+    if (m_file_address)
+    {
+        munmap(m_file_address, m_file_stat.st_size);
+        m_file_address = 0;
+    }
+}
 bool http_conn::write()
 {
-	int temp = 0;
+    int temp = 0;
 
-	if (bytes_to_send == 0)
-	{
-		modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
-		init();
-		return true;
-	}
+    if (bytes_to_send == 0)
+    {
+        modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
+        init();
+        return true;
+    }
 
-	while (1)
-	{	
-		//½«ÏìÓ¦±¨ÎÄµÄ×´Ì¬ĞĞ¡¢ÏûÏ¢Í·¡¢¿ÕĞĞºÍÏìÓ¦ÕıÎÄ·¢ËÍ¸øä¯ÀÀÆ÷¶Ë
-		temp = writev(m_sockfd, m_iv, m_iv_count);
+    while (1)
+    {
+        temp = writev(m_sockfd, m_iv, m_iv_count);
 
-		if (temp < 0)
-		{
-			if (errno == EAGAIN)
-			{
-				//ÖØĞÂ×¢²áĞ´ÊÂ¼ş
-				modfd(m_epollfd, m_sockfd, EPOLLOUT, m_TRIGMode);
-				return true;
-			}
-			//Èç¹û·¢ËÍÊ§°Ü£¬µ«²»ÊÇ»º³åÇøÎÊÌâ£¬È¡ÏûÓ³Éä
-			unmap();
-			return false;
-		}
+        if (temp < 0)
+        {
+            if (errno == EAGAIN)
+            {
+                modfd(m_epollfd, m_sockfd, EPOLLOUT, m_TRIGMode);
+                return true;
+            }
+            unmap();
+            return false;
+        }
 
-		bytes_have_send += temp;
-		bytes_to_send -= temp;
+        bytes_have_send += temp;
+        bytes_to_send -= temp;
+        if (bytes_have_send >= m_iv[0].iov_len)
+        {
+            m_iv[0].iov_len = 0;
+            m_iv[1].iov_base = m_file_address + (bytes_have_send - m_write_idx);
+            m_iv[1].iov_len = bytes_to_send;
+        }
+        else
+        {
+            m_iv[0].iov_base = m_write_buf + bytes_have_send;
+            m_iv[0].iov_len = m_iv[0].iov_len - bytes_have_send;
+        }
 
-		if (bytes_have_send >= m_iv[0].iov_len)//µÚÒ»¸öiovecÍ·²¿ĞÅÏ¢µÄÊı¾İÒÑ·¢ËÍÍê£¬·¢ËÍµÚ¶ş¸öiovecÊı¾İ
-		{
-			//²»ÔÙ¼ÌĞø·¢ËÍÍ·²¿ĞÅÏ¢
-			m_iv[0].iov_len = 0;
-			m_iv[1].iov_base = m_file_adress + (bytes_have_send - m_write_idx);
-			m_iv[1].iov_len = bytes_to_send;
-		}
-		//¼ÌĞø·¢ËÍµÚÒ»¸öiovecÍ·²¿ĞÅÏ¢µÄÊı¾İ
-		else
-		{
-			m_iv[0].iov_base = m_write_buf + bytes_have_send;
-			m_iv[0].iov_len = m_iv[0].iov_len - bytes_have_send;
-		}
+        if (bytes_to_send <= 0)
+        {
+            unmap();
+            modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
 
-		if (bytes_to_send <= 0)
-		{
-			unmap();
-			//ÔÚepollÊ÷ÉÏÖØÖÃEPOLLONESHOTÊÂ¼ş
-			modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
-
-			//ä¯ÀÀÆ÷µÄÇëÇóÎª³¤Á¬½Ó
-			if (m_linger)
-			{
-				//ÖØĞÂ³õÊ¼»¯HTTP¶ÔÏó
-				init();
-				return true;
-			}
-			else
-			{
-				return false;
-			}
-		}
-	}
+            if (m_linger)
+            {
+                init();
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+    }
 }
-
-bool http_conn::add_response(const char* format, ...)
+bool http_conn::add_response(const char *format, ...)
 {
-	//Èç¹ûĞ´ÈëÄÚÈİ³¬³öm_write_buf´óĞ¡Ôò±¨´í
-	if (m_write_idx >= WRITE_BUFFER_SIZE)
-		return false;
+    if (m_write_idx >= WRITE_BUFFER_SIZE)
+        return false;
+    va_list arg_list;
+    va_start(arg_list, format);
+    int len = vsnprintf(m_write_buf + m_write_idx, WRITE_BUFFER_SIZE - 1 - m_write_idx, format, arg_list);
+    if (len >= (WRITE_BUFFER_SIZE - 1 - m_write_idx))
+    {
+        va_end(arg_list);
+        return false;
+    }
+    m_write_idx += len;
+    va_end(arg_list);
 
-	//¶¨Òå¿É±ä²ÎÊıÁĞ±í
-	va_Lsit arg_list;
+    LOG_INFO("request:%s", m_write_buf);
 
-	//½«±äÁ¿arg_list³õÊ¼»¯Îª´«Èë²ÎÊı
-	va_start(arg_list, format);
-
-	//½«Êı¾İformat´Ó¿É±ä²ÎÊıÁĞ±íĞ´Èë»º³åÇøĞ´£¬·µ»ØĞ´ÈëÊı¾İµÄ³¤¶È
-	int len = vsnprintf(m_write_buf + m_write_idx, WRITE_BUFFER_SIZE - 1 - m_write_idx, format, arg_list);
-
-	//Èç¹ûĞ´ÈëµÄÊı¾İ³¤¶È³¬¹ı»º³åÇøÊ£Óà¿Õ¼ä£¬Ôò±¨´í
-	if (len >= (WRITE_BUFFER_SIZE - 1 - m_write_idx))
-	{
-		va_end(arg_list);
-		return false;
-	}
-
-	//¸üĞÂm_write_idxÎ»ÖÃ
-	m_write_idx += len;
-	//Çå¿Õ¿É±ä²ÎÁĞ±í 
-	va_end(arg_list);
-
-	LOG_INFO("request:%s", m_write_buf);
-
-	return true;
+    return true;
 }
-
-//Ìí¼Ó×´Ì¬ĞĞ
-bool http_conn::add_status_line(int status, const char* title)
+bool http_conn::add_status_line(int status, const char *title)
 {
-	return add_response("%s %d %S\r\n", "THHP/1.1", status, title);
+    return add_response("%s %d %s\r\n", "HTTP/1.1", status, title);
 }
-
-//Ìí¼ÓÏûÏ¢±¨Í·£¬¾ßÌåµÄÌí¼ÓÎÄ±¾³¤¶È¡¢Á¬½Ó×´Ì¬ºÍ¿ÕĞĞ
 bool http_conn::add_headers(int content_len)
-{	
-	return
-	add_content_length(content_len) &&
-	add_linger() &&
-	add_blank_line();
+{
+    return add_content_length(content_len) && add_linger() &&
+           add_blank_line();
 }
-
-//Ìí¼ÓContent-Length£¬±íÊ¾ÏìÓ¦±¨ÎÄµÄ³¤¶È
 bool http_conn::add_content_length(int content_len)
 {
-	return add_response("Content-Length:%d\r\n", content_len);
+    return add_response("Content-Length:%d\r\n", content_len);
 }
-
 bool http_conn::add_content_type()
 {
-	return add_response("Content-Type:%s\r\n", "text/html");
+    return add_response("Content-Type:%s\r\n", "text/html");
 }
 bool http_conn::add_linger()
 {
-	return add_response("Connection:%s\r\n", (m_linger == true) ? "keep-alive" : "close");
+    return add_response("Connection:%s\r\n", (m_linger == true) ? "keep-alive" : "close");
 }
 bool http_conn::add_blank_line()
 {
-	return add_response("%s", "\r\n");
+    return add_response("%s", "\r\n");
 }
-bool http_conn::add_content(const char* content)
+bool http_conn::add_content(const char *content)
 {
-	return add_response("%s", content);
+    return add_response("%s", content);
 }
 bool http_conn::process_write(HTTP_CODE ret)
 {
-	switch (ret)
-	{
-		//ÄÚ²¿´íÎó,500
-		case INTERNAL_ERROR:
-		{
-			//×´Ì¬ĞĞ
-			add_status_line(500, error_500_title);
-			//ÏûÏ¢±¨Í·
-			add_headers(strlen(error_500_form));
-			if (!add_content(error_500_form))
-				return false;
-			break;
-		}
-		//±¨ÎÄÓï·¨ÓĞÎó,404
-		case BAD_REQUEST:
-		{
-			add_status_line(404, error_404_title);
-			add_headers(strlen(error_404_form));
-			if (!add_content(error_404_form))
-				return false;
-			break;
-		}
-		//×ÊÔ´Ã»ÓĞ·ÃÎÊÈ¨ÏŞ£¬403
-		case FORBIDDEN_REQUEST:
-		{
-			add_status_line(403, error_403_title);
-			add_headers(strlen(error_403_form));
-			if (!add_content(error_403_form))
-				return false;
-		}
-		//ÎÄ¼ş´æÔÚ£¬200
-		case FILE_REQUEST:
-		{
-			add_status_line(200, ok_200_title);
-			//Èç¹ûÇëÇóµÄ×ÊÔ´´æÔÚ
-			if (m_file_stat.st_size != 0)
-			{
-				add_headers(m_file_stat.st_size);
-				//µÚÒ»¸öiovecÖ¸ÕëÖ¸ÏòÏìÓ¦±¨ÎÄ»º³åÇø£¬³¤¶ÈÖ¸Ïòm_write_idx
-				m_iv[0].iov_base = m_write_buf;
-				m_iv[0].iov_len = m_write_idx;
-				//µÚ¶ş¸öiovecÖ¸ÕëÖ¸Ïòmmap·µ»ØµÄÎÄ¼şÖ¸Õë£¬³¤¶ÈÖ¸ÏòÎÄ¼ş´óĞ¡
-				m_iv[1].iov_base = m_file_address;
-				m_iv[1].iov_len = m_file_stat.st_size;
-				m_iv_count = 2;
-				//·¢ËÍµÄÈ«²¿Êı¾İÎªÏìÓ¦±¨ÎÄÍ·²¿ĞÅÏ¢ºÍÎÄ¼ş´óĞ¡
-				bytes_to_send = m_write_idx + m_file_stat.st_size;
-				return true;
-			}
-			else
-			{
-				//Èç¹ûÇëÇóµÄ×ÊÔ´´óĞ¡Îª0£¬Ôò·µ»Ø¿Õ°×htmlÎÄ¼ş
-				const char* ok_string = "<html><body></body></html";
-				add_headers(strlen(ok_string));
-				if (!add_content(ok_string))
-					return false;
-			}
-		}
-		default:
-			return false;
-	}
-	//³ıFILE_REQUEST×´Ì¬Íâ£¬ÆäÓà×´Ì¬Ö»ÉêÇëÒ»¸öiovec£¬Ö¸ÏòÏìÓ¦±¨ÎÄ»º³åÇø
-	m_iv[0].iov_base = m_write_buf;
-	m_iv[0].iov_len = m_write_idx;
-	m_iv_count = 1;
-	bytes_to_send = m_write_idx;
-	return true;
+    switch (ret)
+    {
+    case INTERNAL_ERROR:
+    {
+        add_status_line(500, error_500_title);
+        add_headers(strlen(error_500_form));
+        if (!add_content(error_500_form))
+            return false;
+        break;
+    }
+    case BAD_REQUEST:
+    {
+        add_status_line(404, error_404_title);
+        add_headers(strlen(error_404_form));
+        if (!add_content(error_404_form))
+            return false;
+        break;
+    }
+    case FORBIDDEN_REQUEST:
+    {
+        add_status_line(403, error_403_title);
+        add_headers(strlen(error_403_form));
+        if (!add_content(error_403_form))
+            return false;
+        break;
+    }
+    case FILE_REQUEST:
+    {
+        add_status_line(200, ok_200_title);
+        if (m_file_stat.st_size != 0)
+        {
+            add_headers(m_file_stat.st_size);
+            m_iv[0].iov_base = m_write_buf;
+            m_iv[0].iov_len = m_write_idx;
+            m_iv[1].iov_base = m_file_address;
+            m_iv[1].iov_len = m_file_stat.st_size;
+            m_iv_count = 2;
+            bytes_to_send = m_write_idx + m_file_stat.st_size;
+            return true;
+        }
+        else
+        {
+            const char *ok_string = "<html><body></body></html>";
+            add_headers(strlen(ok_string));
+            if (!add_content(ok_string))
+                return false;
+        }
+    }
+    default:
+        return false;
+    }
+    m_iv[0].iov_base = m_write_buf;
+    m_iv[0].iov_len = m_write_idx;
+    m_iv_count = 1;
+    bytes_to_send = m_write_idx;
+    return true;
 }
-
-void http_cpmm::process()
+void http_conn::process()
 {
-	HTTP_CODE read_ret = process_read();
-	if (read_ret == NO_REQUEST)
-	{
-		modefd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
-		return;
-	}
-	bool write_ret = process_write(read_ret);
-	if (!write_ret)
-	{
-		close_conn();
-	}
-	modfd(m_epollfd, m_sockfd, EPOLLOUT, m_TRIGMode);
+    HTTP_CODE read_ret = process_read();
+    if (read_ret == NO_REQUEST)
+    {
+        modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
+        return;
+    }
+    bool write_ret = process_write(read_ret);
+    if (!write_ret)
+    {
+        close_conn();
+    }
+    modfd(m_epollfd, m_sockfd, EPOLLOUT, m_TRIGMode);
 }
-

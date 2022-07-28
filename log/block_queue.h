@@ -1,10 +1,7 @@
 /*************************************************************
-*Ñ­»·Êı×éÊµÏÖµÄ×èÈû¶ÓÁĞ£¬m_back = (m_back + 1) % m_max_size;
-*Ïß³Ì°²È«£¬Ã¿¸ö²Ù×÷Ç°¶¼ÒªÏÈ¼Ó»¥³âËø£¬²Ù×÷Íêºó£¬ÔÙ½âËø
+*å¾ªç¯æ•°ç»„å®ç°çš„é˜»å¡é˜Ÿåˆ—ï¼Œm_back = (m_back + 1) % m_max_size;  
+*çº¿ç¨‹å®‰å…¨ï¼Œæ¯ä¸ªæ“ä½œå‰éƒ½è¦å…ˆåŠ äº’æ–¥é”ï¼Œæ“ä½œå®Œåï¼Œå†è§£é”
 **************************************************************/
-
-#ifndef BLOCK_QUEUE_H
-#define BLOCK_QUEUE_H
 
 #ifndef BLOCK_QUEUE_H
 #define BLOCK_QUEUE_H
@@ -20,193 +17,196 @@ template <class T>
 class block_queue
 {
 public:
-	block_queue(int max_size = 1000)
-	{
-		if (max_size <= 0)
-		{
-			exit(-1);
-		}
+    block_queue(int max_size = 1000)
+    {
+        if (max_size <= 0)
+        {
+            exit(-1);
+        }
 
-		//¹¹Ôìº¯Êı´´½¨Ñ­»·Êı×é
-		m_max_size = max_size;
-		m_arry = new T[max_size];
-		m_size = 0;
-		m_front = -1;
-		m_back = -1;
-	}
+        m_max_size = max_size;
+        m_array = new T[max_size];
+        m_size = 0;
+        m_front = -1;
+        m_back = -1;
+    }
 
-	void clear()
-	{
-		m_mutex.lock();
-		m_size = 0;
-		m_front = -1;
-		m_back = -1;
-		m_mutex.unlock();
-	}
+    void clear()
+    {
+        m_mutex.lock();
+        m_size = 0;
+        m_front = -1;
+        m_back = -1;
+        m_mutex.unlock();
+    }
 
-	~block_queue()
-	{
-		m_mutex.lock();
-		if (m_array != NULL)
-			delete[] m_array;
+    ~block_queue()
+    {
+        m_mutex.lock();
+        if (m_array != NULL)
+            delete [] m_array;
 
-		m_mutex.unlock();
-	}
+        m_mutex.unlock();
+    }
+    //åˆ¤æ–­é˜Ÿåˆ—æ˜¯å¦æ»¡äº†
+    bool full() 
+    {
+        m_mutex.lock();
+        if (m_size >= m_max_size)
+        {
 
-	bool full()
-	{
-		m_mutex.lock();
-		if (m_size >= m_max_size)
-		{
-			m_mutex.unlock();
-			return true;
-		}
-		m_mutex.unlock();
-		return false;
-	}
+            m_mutex.unlock();
+            return true;
+        }
+        m_mutex.unlock();
+        return false;
+    }
+    //åˆ¤æ–­é˜Ÿåˆ—æ˜¯å¦ä¸ºç©º
+    bool empty() 
+    {
+        m_mutex.lock();
+        if (0 == m_size)
+        {
+            m_mutex.unlock();
+            return true;
+        }
+        m_mutex.unlock();
+        return false;
+    }
+    //è¿”å›é˜Ÿé¦–å…ƒç´ 
+    bool front(T &value) 
+    {
+        m_mutex.lock();
+        if (0 == m_size)
+        {
+            m_mutex.unlock();
+            return false;
+        }
+        value = m_array[m_front];
+        m_mutex.unlock();
+        return true;
+    }
+    //è¿”å›é˜Ÿå°¾å…ƒç´ 
+    bool back(T &value) 
+    {
+        m_mutex.lock();
+        if (0 == m_size)
+        {
+            m_mutex.unlock();
+            return false;
+        }
+        value = m_array[m_back];
+        m_mutex.unlock();
+        return true;
+    }
 
-	bool empty()
-	{
-		m_mutex.lock();
-		if (0 == m_size)
-		{
-			m_mutex.unlock();
-			return true;
-		}
-		m_mutex.unlock();
-		return false;
-	}
+    int size() 
+    {
+        int tmp = 0;
 
-	bool front(T& value)
-	{
-		m_mutex.unlock();
-		if (0 == m_size)
-		{
-			m_mutex.unlock();
-			return false;
-		}
-		value = m_array[m_front];
-		m_mutex.unlock();
-		return true;
-	}
+        m_mutex.lock();
+        tmp = m_size;
 
-	bool back(T& value)
-	{
-		m_mutex.lock();
-		if (0 == m_size)
-		{
-			m_mutex.unlock();
-			return false;
-		}
-		value = m_array[m_back];
-		m_mutex.unlock();
-		return true;
-	}
+        m_mutex.unlock();
+        return tmp;
+    }
 
-	int size()
-	{
-		int tmp = 0;
+    int max_size()
+    {
+        int tmp = 0;
 
-		m_mutex.lock();
-		tmp = m_size;
-		m_mutex.unlock();
-		
-		return tmp;
-	}
+        m_mutex.lock();
+        tmp = m_max_size;
 
-	int max_size()
-	{
-		int tmp = 0;
+        m_mutex.unlock();
+        return tmp;
+    }
+    //å¾€é˜Ÿåˆ—æ·»åŠ å…ƒç´ ï¼Œéœ€è¦å°†æ‰€æœ‰ä½¿ç”¨é˜Ÿåˆ—çš„çº¿ç¨‹å…ˆå”¤é†’
+    //å½“æœ‰å…ƒç´ pushè¿›é˜Ÿåˆ—,ç›¸å½“äºç”Ÿäº§è€…ç”Ÿäº§äº†ä¸€ä¸ªå…ƒç´ 
+    //è‹¥å½“å‰æ²¡æœ‰çº¿ç¨‹ç­‰å¾…æ¡ä»¶å˜é‡,åˆ™å”¤é†’æ— æ„ä¹‰
+    bool push(const T &item)
+    {
 
-		m_mutex.lock();
-		tmp = m_max_size;
+        m_mutex.lock();
+        if (m_size >= m_max_size)
+        {
 
-		m_mutex.unlock();
-		return tmp;
-	}
+            m_cond.broadcast();
+            m_mutex.unlock();
+            return false;
+        }
 
-//Íù¶ÓÁĞÌí¼ÓÔªËØ£¬ĞèÒª½«ËùÓĞÊ¹ÓÃ¶ÓÁĞµÄÏß³ÌÏÈ»½ĞÑ
-//µ±ÓĞÔªËØpush½ø¶ÓÁĞ,Ïàµ±ÓÚÉú²úÕßÉú²úÁËÒ»¸öÔªËØ
-//Èôµ±Ç°Ã»ÓĞÏß³ÌµÈ´ıÌõ¼ş±äÁ¿,Ôò»½ĞÑÎŞÒâÒå
-	bool push(const T& item)
-	{
+        m_back = (m_back + 1) % m_max_size;
+        m_array[m_back] = item;
 
-		m_mutex.lock();
-		if (m_size >= m_max_size)
-		{
-			m.cond.broadcast();
-			m_mutex.unlock();
-			return false;
-		}
+        m_size++;
 
-		m_back = (m_back + 1) % m_max_size;
-		m_array[m_back] = item;
+        m_cond.broadcast();
+        m_mutex.unlock();
+        return true;
+    }
+    //popæ—¶,å¦‚æœå½“å‰é˜Ÿåˆ—æ²¡æœ‰å…ƒç´ ,å°†ä¼šç­‰å¾…æ¡ä»¶å˜é‡
+    bool pop(T &item)
+    {
 
-		m_size++;
+        m_mutex.lock();
+        while (m_size <= 0)
+        {
+            
+            if (!m_cond.wait(m_mutex.get()))
+            {
+                m_mutex.unlock();
+                return false;
+            }
+        }
 
-		m_cond.broadcast();
-		m_mutex.unlock();
-		return true;
-	}
+        m_front = (m_front + 1) % m_max_size;
+        item = m_array[m_front];
+        m_size--;
+        m_mutex.unlock();
+        return true;
+    }
 
-	bool pop(T& item)
-	{
-		m_mutex.lock();
-		while (m_size <= 0)
-		{
-			if (!m_cond_wait(m_mutex.get()))
-			{
-				m_mutex.unlock();
-				return false;
-			}
-		}
+    //å¢åŠ äº†è¶…æ—¶å¤„ç†
+    bool pop(T &item, int ms_timeout)
+    {
+        struct timespec t = {0, 0};
+        struct timeval now = {0, 0};
+        gettimeofday(&now, NULL);
+        m_mutex.lock();
+        if (m_size <= 0)
+        {
+            t.tv_sec = now.tv_sec + ms_timeout / 1000;
+            t.tv_nsec = (ms_timeout % 1000) * 1000;
+            if (!m_cond.timewait(m_mutex.get(), t))
+            {
+                m_mutex.unlock();
+                return false;
+            }
+        }
 
-		m_front = (m_front + 1) % m_max_size;
-		item = m_array[m_front];
-		--m_size;
-		m_mutex.unlock();
-		return true;
-	}
+        if (m_size <= 0)
+        {
+            m_mutex.unlock();
+            return false;
+        }
 
-	bool pop(T& item, int ms_timeout)
-	{
-		struct timespec t = { 0, 0 };
-		struct timeval now = { 0, 0 };
-		gettimeofday(&now, NULL);
-		m_mutex.lock();
-		if (m_size <= 0)
-		{
-			t.tv_sec = now.tv_sec + ms_timeout / 1000;
-			t.tv_nsec = (ms_timeout % 1000) * 1000;
-			if (!m_cond.timewait(m_mutex.get(), t))
-			{
-				m_mutex.unlock();
-				return false;
-			}
-		}
-
-		if (m_size <= 0)
-		{
-			m_mutex.unlock();
-			return false;
-		}
-
-		m_front = (m_front + 1) % m_max_size;
-		item = m_array[m_front];
-		m_size--;
-		m_mutex.unlock();
-		return true;
-	}
+        m_front = (m_front + 1) % m_max_size;
+        item = m_array[m_front];
+        m_size--;
+        m_mutex.unlock();
+        return true;
+    }
 
 private:
-	locker m_mutex;
-	cond m_cond;
+    locker m_mutex;
+    cond m_cond;
 
-	T* m_array;
-	int m_size;
-	int m_max_size;
-	int m_front;
-	int m_back;
+    T *m_array;
+    int m_size;
+    int m_max_size;
+    int m_front;
+    int m_back;
 };
 
 #endif

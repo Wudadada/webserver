@@ -26,86 +26,77 @@
 
 class util_timer;
 
-//Á¬½Ó×ÊÔ´
 struct client_data
 {
-	//¿Í»§¶ËsocketµØÖ·
-	sockaddr_in address;
-
-	//socketÎÄ¼şÃèÊö·û
-	int sockfd;
-
-	//¶¨Ê±Æ÷
-	util_timer* timer;
+    sockaddr_in address;
+    int sockfd;
+    util_timer *timer;
 };
 
 class util_timer
 {
 public:
-	util_timer() : prev(NULL), next(NULL);
+    util_timer() : prev(NULL), next(NULL) {}
 
 public:
-	//³¬Ê±Ê±¼ä
-	time_t expire;
-
-	//»Øµ÷º¯Êı
-	void (*cb_func)(client_data*);
-	//Á¬½Ó×ÊÔ´
-	client_data* user_data;
-	//Ç°Ïò¶¨Ê±Æ÷
-	util_timer* prev;
-	//ºó¼Ì¶¨Ê±Æ÷
-	util_timer* next;
+    time_t expire;
+    
+    void (* cb_func)(client_data *);
+    client_data *user_data;
+    util_timer *prev;
+    util_timer *next;
 };
 
 class sort_timer_lst
 {
 public:
-	sort_timer_lst();
-	~sort_timer_lst();
+    sort_timer_lst();
+    ~sort_timer_lst();
 
-	void add_timer(util_timer* timer);
-	void adjust_timer(util_timer* timer);
-	void del_timer(util_timer* timer);
-	void tick();
+    void add_timer(util_timer *timer);
+    void adjust_timer(util_timer *timer);
+    void del_timer(util_timer *timer);
+    void tick();
 
 private:
-	void add_timer(util_timer* timer, util_timer* lst_head);
+    void add_timer(util_timer *timer, util_timer *lst_head);
 
-	util_timer* head;
-	util_timer* tail;
+    util_timer *head;
+    util_timer *tail;
 };
 
 class Utils
 {
 public:
-	Utils(){}
-	~Utils(){}
+    Utils() {}
+    ~Utils() {}
 
-	void init(int timeslot);
+    void init(int timeslot);
 
-	//¶ÔÎÄ¼şÃèÊö·ûÉèÖÃ·Ç×èÈû
-	int setnonblocking(int fd);
+    //å¯¹æ–‡ä»¶æè¿°ç¬¦è®¾ç½®éé˜»å¡
+    int setnonblocking(int fd);
 
-	//½«ÄÚºËÊ±¼ä±í×¢²á¶ÁÊÂ¼ş£¬ETÄ£Ê½£¬Ñ¡Ôñ¿ªÆôEPOLLONESHOT
-	void addfd(int epollfd, int fd, bool one_shot, int TRIGMode);
+    //å°†å†…æ ¸äº‹ä»¶è¡¨æ³¨å†Œè¯»äº‹ä»¶ï¼ŒETæ¨¡å¼ï¼Œé€‰æ‹©å¼€å¯EPOLLONESHOT
+    void addfd(int epollfd, int fd, bool one_shot, int TRIGMode);
 
-	//ĞÅºÅ´¦Àíº¯Êı
-	static void sig_handler(int sig);
+    //ä¿¡å·å¤„ç†å‡½æ•°
+    static void sig_handler(int sig);
 
-	//ÉèÖÃĞÅºÅº¯Êı
-	void addsig(int sig, void(handler)(int), bool restart = true);
+    //è®¾ç½®ä¿¡å·å‡½æ•°
+    void addsig(int sig, void(handler)(int), bool restart = true);
 
-	//¶¨Ê±´¦ÀíÈÎÎñ£¬ÖØĞÂ¶¨Ê±ÒÔ²»¶Ï´¥·¢SIGALRMĞÅºÅ
-	void timer_handler();
+    //å®šæ—¶å¤„ç†ä»»åŠ¡ï¼Œé‡æ–°å®šæ—¶ä»¥ä¸æ–­è§¦å‘SIGALRMä¿¡å·
+    void timer_handler();
 
-	void show_error(int connfd, const char* info);
+    void show_error(int connfd, const char *info);
 
 public:
-	static int* u_pipefd;
-	sort_timer_lst m_timer_lst;
-	static int u_epollfd;
-	int m_TIMESLOT;
+    static int *u_pipefd;
+    sort_timer_lst m_timer_lst;
+    static int u_epollfd;
+    int m_TIMESLOT;
 };
 
-void cb_func(client_data* user_data);
+void cb_func(client_data *user_data);
+
+#endif
